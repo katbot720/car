@@ -1,0 +1,3946 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Highway & Cities Free Roam 3D — Multi-City Open World</title>
+  <!-- Tailwind CSS for responsive HUD -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Three.js r128 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <!-- Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Inter', sans-serif;
+      background-color: #94a3b8;
+    }
+    canvas#game-canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+    }
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .safe-top {
+      padding-top: max(0.35rem, env(safe-area-inset-top));
+      padding-left: max(0.4rem, env(safe-area-inset-left));
+      padding-right: max(0.4rem, env(safe-area-inset-right));
+    }
+    .safe-bottom {
+      padding-bottom: max(0.35rem, env(safe-area-inset-bottom));
+      padding-left: max(0.4rem, env(safe-area-inset-left));
+      padding-right: max(0.4rem, env(safe-area-inset-right));
+    }
+    .hud-card {
+      background: rgba(15, 23, 42, 0.84);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.13);
+      box-shadow: 0 6px 20px rgba(15, 23, 42, 0.25);
+    }
+    .touch-btn {
+      background: rgba(15, 23, 42, 0.82);
+      border: 1.5px solid rgba(255, 255, 255, 0.22);
+      touch-action: none;
+      transition: transform 0.06s ease, background-color 0.06s ease;
+    }
+    .touch-btn:active, .touch-btn.active {
+      transform: scale(0.94);
+      background: rgba(20, 184, 166, 0.85);
+      border-color: rgba(255, 255, 255, 0.6);
+    }
+    .top-pill-btn {
+      padding: clamp(0.28rem, 0.9vmin, 0.45rem) clamp(0.45rem, 1.3vmin, 0.7rem);
+      font-size: clamp(0.68rem, 1.7vmin, 0.8rem);
+      border-radius: 0.6rem;
+      line-height: 1.1;
+    }
+    /* Enlarged ergonomic touch controls */
+    .steer-btn {
+      width: clamp(3.8rem, 16.5vmin, 5.6rem);
+      height: clamp(3.8rem, 16.5vmin, 5.6rem);
+      font-size: clamp(1.35rem, 5vmin, 2.0rem);
+      border-radius: clamp(0.9rem, 2.6vmin, 1.3rem);
+    }
+    .drift-btn {
+      width: clamp(3.0rem, 12.5vmin, 4.3rem);
+      height: clamp(3.8rem, 16.5vmin, 5.6rem);
+      font-size: clamp(0.65rem, 1.85vmin, 0.84rem);
+      border-radius: clamp(0.8rem, 2.2vmin, 1.15rem);
+    }
+    .stop-btn {
+      width: clamp(3.7rem, 16vmin, 5.4rem);
+      height: clamp(4.1rem, 18vmin, 6.0rem);
+      font-size: clamp(0.76rem, 2.2vmin, 0.98rem);
+      border-radius: clamp(0.9rem, 2.5vmin, 1.25rem);
+    }
+    .go-btn {
+      width: clamp(4.0rem, 17.5vmin, 5.8rem);
+      height: clamp(4.5rem, 20vmin, 6.6rem);
+      font-size: clamp(0.85rem, 2.5vmin, 1.1rem);
+      border-radius: clamp(0.95rem, 2.7vmin, 1.35rem);
+    }
+    .blinker-btn {
+      padding: clamp(0.32rem, 1.1vmin, 0.5rem) clamp(0.55rem, 1.8vmin, 0.8rem);
+      font-size: clamp(0.72rem, 1.85vmin, 0.86rem);
+      border-radius: 0.6rem;
+    }
+    @keyframes pulseIndicator {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.22; }
+    }
+    .indicator-blink {
+      animation: pulseIndicator 0.55s infinite;
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(100, 116, 139, 0.6);
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body class="relative text-slate-100">
+
+  <!-- 3D WebGL Canvas -->
+  <canvas id="game-canvas"></canvas>
+
+  <!-- COMPACT TOP HUD BAR -->
+  <div id="hud-top" class="pointer-events-none fixed top-0 left-0 right-0 z-20 safe-top flex items-start justify-between gap-1.5">
+
+    <!-- Left: Compact Credits, Zone & Toast -->
+    <div class="flex flex-col gap-1 pointer-events-auto shrink-0 max-w-[38vw] sm:max-w-none">
+      <div class="hud-card rounded-xl px-2.5 py-1 flex items-center gap-2">
+        <div>
+          <div class="text-[8px] uppercase tracking-wider text-slate-400 font-semibold">Credits</div>
+          <div id="hud-cash" class="mono text-xs sm:text-base font-bold text-emerald-400">₹500</div>
+        </div>
+        <div class="h-5 w-px bg-slate-700"></div>
+        <div>
+          <div class="text-[8px] uppercase tracking-wider text-slate-400 font-semibold">Zone</div>
+          <div id="hud-district" class="text-[10px] sm:text-xs font-bold text-teal-300 truncate max-w-[85px] sm:max-w-[140px]">Sunport City</div>
+        </div>
+      </div>
+
+      <!-- Event / Discovery Toast -->
+      <div id="hud-toast" class="hidden hud-card rounded-lg px-2.5 py-1 text-[11px] font-medium text-slate-100 border-l-4 border-teal-400 max-w-[230px] sm:max-w-xs">
+        Welcome to Highway & Cities Free Roam!
+      </div>
+    </div>
+
+    <!-- Center: Compact GPS / Taxi / Race Banner -->
+    <div id="hud-gps-panel" class="hud-card rounded-xl px-2.5 py-1 flex items-center gap-2 min-w-[140px] sm:min-w-[280px] max-w-[44vw] sm:max-w-md mx-auto">
+      <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-800 border border-slate-600 flex items-center justify-center text-teal-400 shrink-0">
+        <svg id="gps-arrow-svg" class="w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="19" x2="12" y2="5"></line>
+          <polyline points="5 12 12 5 19 12"></polyline>
+        </svg>
+      </div>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center justify-between gap-1">
+          <span id="gps-mode-badge" class="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-teal-500/20 text-teal-300">Roam</span>
+          <span id="gps-dist" class="mono text-[10px] text-slate-300 shrink-0">Free</span>
+          <button id="btn-clear-waypoint" class="hidden text-[9px] font-bold text-rose-300 underline cursor-pointer pointer-events-auto">✕</button>
+        </div>
+        <div id="gps-instruction" class="text-[11px] sm:text-xs font-semibold text-white truncate">Walk to car or open Map (M)</div>
+      </div>
+    </div>
+
+    <!-- Right: Compact Action Pills + Overflow '⋯' Menu -->
+    <div class="relative flex flex-col items-end gap-1 pointer-events-auto shrink-0">
+      <div class="flex items-center gap-1">
+        <button id="btn-taxi" title="Start/Cancel Long-Distance Taxi Fare (J)" class="hud-card top-pill-btn hover:bg-slate-800 text-amber-300 font-bold cursor-pointer">
+          🚕 <span class="hidden sm:inline">Taxi</span>
+        </button>
+        <button id="btn-race" title="Highway Circuit Race (B)" class="hud-card top-pill-btn hover:bg-slate-800 text-sky-300 font-bold cursor-pointer">
+          🏁 <span class="hidden sm:inline">Race</span>
+        </button>
+        <button id="btn-map" title="Open GTA-Style World Map (M)" class="hud-card top-pill-btn hover:bg-slate-800 text-teal-300 font-bold cursor-pointer">
+          🗺️ <span class="hidden sm:inline">Map</span>
+        </button>
+        <button id="btn-garage" title="Garage & Fleet (G)" class="hud-card top-pill-btn hover:bg-slate-800 text-slate-100 font-bold cursor-pointer">
+          🔧 <span class="hidden sm:inline">Garage</span>
+        </button>
+        <button id="btn-more-menu" title="More Options" class="hud-card top-pill-btn hover:bg-slate-800 text-white font-extrabold cursor-pointer">
+          ⋯
+        </button>
+      </div>
+
+      <!-- Collapsible '⋯' Overflow Drawer -->
+      <div id="more-menu-drawer" class="hidden hud-card rounded-xl p-2 flex flex-col gap-1.5 min-w-[165px] z-30 border border-slate-700">
+        <button id="btn-cam" class="w-full text-left px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-semibold flex justify-between items-center cursor-pointer">
+          <span>🎥 Camera</span>
+          <span id="cam-label" class="text-teal-300 font-bold">Chase</span>
+        </button>
+        <button id="btn-weather" class="w-full text-left px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-semibold flex justify-between items-center cursor-pointer">
+          <span>🌦️ Weather</span>
+          <span id="weather-label" class="text-amber-300 font-bold">Morning</span>
+        </button>
+        <button id="btn-audio" class="w-full text-left px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-semibold flex justify-between items-center cursor-pointer">
+          <span>🔊 Engine Audio</span>
+          <span id="audio-icon" class="font-bold text-emerald-300">ON</span>
+        </button>
+        <button id="btn-horn-menu" class="w-full text-left px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-semibold flex justify-between items-center cursor-pointer">
+          <span>📯 Honk Horn</span>
+          <span class="mono text-[10px] text-slate-400">H</span>
+        </button>
+        <button id="btn-chill-toggle" class="w-full text-left px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-semibold flex justify-between items-center cursor-pointer">
+          <span>🌿 Chill Mode</span>
+          <span id="chill-status-label" class="font-bold text-slate-400">OFF</span>
+        </button>
+        <button id="btn-reset" class="w-full text-left px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-semibold flex justify-between items-center cursor-pointer">
+          <span>🔄 Reset to Road</span>
+          <span class="mono text-[10px] text-slate-400">R</span>
+        </button>
+        <button id="btn-fullscreen" class="w-full text-left px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-semibold flex justify-between items-center cursor-pointer">
+          <span>⛶ Fullscreen</span>
+          <span class="mono text-[10px] text-slate-400">F</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- COMPACT BOTTOM HUD: ENLARGED LEFT/RIGHT/DRIFT/BLINKERS + SPEEDO + GET IN/EXIT CAR + GO/STOP -->
+  <div class="pointer-events-none fixed bottom-0 left-0 right-0 z-20 safe-bottom flex items-end justify-between gap-1.5">
+
+    <!-- Left Controls: Left/Right Blinkers + Enlarged Left/Right Steering -->
+    <div class="flex flex-col gap-1.5 pointer-events-auto shrink-0">
+      <div class="flex items-center gap-1.5">
+        <button id="btn-ind-left" title="Left Blinker (Q)" class="touch-btn blinker-btn font-bold text-amber-300 flex items-center gap-1 cursor-pointer">
+          <span>◀</span><span class="text-[10px] text-slate-300">Q</span>
+        </button>
+        <button id="btn-ind-right" title="Right Blinker (E)" class="touch-btn blinker-btn font-bold text-amber-300 flex items-center gap-1 cursor-pointer">
+          <span class="text-[10px] text-slate-300">E</span><span>▶</span>
+        </button>
+      </div>
+      <div class="flex items-center gap-2 lg:hidden">
+        <button id="touch-left" aria-label="Steer Left" class="touch-btn steer-btn flex items-center justify-center text-white font-extrabold shadow-lg">
+          ◀
+        </button>
+        <button id="touch-right" aria-label="Steer Right" class="touch-btn steer-btn flex items-center justify-center text-white font-extrabold shadow-lg">
+          ▶
+        </button>
+      </div>
+    </div>
+
+    <!-- Center: Compact Speedometer, Gear, Fuel/Health & Context Door Button -->
+    <div class="flex flex-col items-center gap-1.5 pointer-events-auto mx-auto min-w-0">
+      <!-- Context-sensitive Enter / Exit Door Button (appears when near Home or Shop door on foot) -->
+      <button id="btn-door-action" class="hidden hud-card px-3 py-1.5 rounded-xl text-xs font-extrabold text-teal-300 border border-teal-400/60 shadow-lg cursor-pointer">
+        🚪 Enter Door (T)
+      </button>
+
+      <div class="hud-card rounded-2xl px-2.5 py-1.5 sm:px-3.5 sm:py-2 flex items-center gap-2 sm:gap-3">
+        <span id="dash-ind-l" class="text-amber-400 text-xs sm:text-sm opacity-20">◀</span>
+        <div class="text-center min-w-[42px] sm:min-w-[56px]">
+          <div id="hud-speed" class="mono text-base sm:text-2xl font-extrabold text-white leading-none">0</div>
+          <div class="text-[8px] font-semibold uppercase tracking-widest text-slate-400 mt-0.5">KM/H</div>
+        </div>
+        <span id="dash-ind-r" class="text-amber-400 text-xs sm:text-sm opacity-20">▶</span>
+        <div class="h-6 w-px bg-slate-700"></div>
+        <div class="text-center">
+          <div id="hud-gear" class="mono text-xs sm:text-base font-bold text-teal-400">WALK</div>
+          <div class="text-[8px] uppercase text-slate-400 font-semibold">Mode</div>
+        </div>
+        <div class="h-6 w-px bg-slate-700 hidden sm:block"></div>
+        <div class="hidden sm:flex flex-col gap-1 min-w-[68px]">
+          <div class="flex items-center gap-1">
+            <span class="text-[8px] font-bold text-slate-400 w-5">FUEL</span>
+            <div class="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+              <div id="hud-fuel-bar" class="h-full bg-emerald-400" style="width: 100%"></div>
+            </div>
+          </div>
+          <div class="flex items-center gap-1">
+            <span class="text-[8px] font-bold text-slate-400 w-5">HP</span>
+            <div class="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+              <div id="hud-hp-bar" class="h-full bg-sky-400" style="width: 100%"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Controls: Get In/Exit Car + Gear +/- + Enlarged DRIFT, STOP & GO -->
+    <div class="flex flex-col items-end gap-1.5 pointer-events-auto shrink-0">
+      <div class="flex items-center gap-1.5">
+        <button id="gear-down" title="Shift Down (Z)" class="touch-btn px-2.5 py-1 rounded-lg text-xs font-extrabold text-slate-200 lg:hidden">
+          G-
+        </button>
+        <button id="gear-up" title="Shift Up (X)" class="touch-btn px-2.5 py-1 rounded-lg text-xs font-extrabold text-slate-200 lg:hidden">
+          G+
+        </button>
+        <button id="btn-vehicle-toggle" title="Get In / Exit Car (V)" class="hud-card px-3 py-1.5 rounded-xl text-xs font-extrabold text-emerald-300 border border-emerald-500/50 cursor-pointer shadow-md">
+          🚗 Get In Car
+        </button>
+      </div>
+      <div class="flex items-end gap-1.5 sm:gap-2 lg:hidden">
+        <button id="touch-handbrake" aria-label="Drift Handbrake" class="touch-btn drift-btn flex items-center justify-center font-extrabold text-amber-300 shadow-lg">
+          DRIFT
+        </button>
+        <button id="touch-brake" aria-label="Stop / Reverse" class="touch-btn stop-btn flex items-center justify-center font-extrabold text-rose-300 shadow-lg">
+          STOP
+        </button>
+        <button id="touch-gas" aria-label="Go / Accelerate" class="touch-btn go-btn flex items-center justify-center font-extrabold text-emerald-300 shadow-lg">
+          GO
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- GTA-STYLE VECTOR WORLD MAP MODAL ('M' Key or Map Button) -->
+  <div id="fullmap-modal" class="hidden fixed inset-0 z-40 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full p-4 sm:p-5 shadow-2xl">
+      <div class="flex items-center justify-between gap-2 border-b border-slate-800 pb-3">
+        <div>
+          <h2 class="text-base sm:text-xl font-bold text-white">Multi-City & Curved Highway Atlas</h2>
+          <p class="text-[11px] sm:text-xs text-teal-300 font-medium">Tap anywhere on the map to set a curved GPS waypoint</p>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <button id="modal-clear-pin" class="bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 px-2.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer">
+            Clear Pin
+          </button>
+          <button id="close-fullmap" class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer">
+            ✕ (M)
+          </button>
+        </div>
+      </div>
+      <div class="mt-3 flex justify-center">
+        <canvas id="fullmap-canvas" width="460" height="460" class="rounded-xl bg-slate-950 border border-slate-700 max-w-full h-auto cursor-crosshair"></canvas>
+      </div>
+      <div class="mt-3 flex flex-wrap items-center justify-center gap-3 text-[11px] text-slate-300">
+        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-white inline-block"></span>You</span>
+        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block"></span>GPS Pin</span>
+        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block"></span>Taxi Fare</span>
+        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block"></span>Emblem (<span id="map-emblem-count">0/20</span>)</span>
+        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-sky-400 inline-block"></span>Radar</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- GARAGE, PAINT SHOP & VEHICLE SWITCHER MODAL ('G' Key) -->
+  <div id="garage-modal" class="hidden fixed inset-0 z-40 bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full p-4 sm:p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3.5">
+        <div>
+          <h2 class="text-lg sm:text-xl font-bold text-white">Highway & City Garage</h2>
+          <p class="text-xs text-slate-400 mt-0.5">Paint your ride, tune speed & traction, or switch vehicles</p>
+        </div>
+        <div class="flex items-center gap-2.5">
+          <div class="bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700">
+            <span class="text-[10px] text-slate-400 uppercase block">Credits</span>
+            <span id="garage-cash" class="mono text-sm font-bold text-emerald-400">₹500</span>
+          </div>
+          <button id="close-garage" class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-2 rounded-lg text-xs font-bold cursor-pointer">
+            ✕ (G)
+          </button>
+        </div>
+      </div>
+
+      <!-- Paint Color Swatches -->
+      <div class="mt-4">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Matte Paint Finish</h3>
+          <span id="paint-name-label" class="text-xs font-semibold text-teal-300">Glacier White</span>
+        </div>
+        <div id="paint-swatches" class="flex flex-wrap gap-2.5"></div>
+      </div>
+
+      <!-- Performance Upgrades -->
+      <div class="mt-5">
+        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5">Performance Tuning</h3>
+        <div id="upgrades-list" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+      </div>
+
+      <!-- Vehicle Fleet -->
+      <div class="mt-5">
+        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5">Drivable Fleet (6 Vehicles)</h3>
+        <div id="vehicles-list" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- COMPACT WELCOME MODAL -->
+  <div id="welcome-modal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-2xl">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="px-2.5 py-0.5 rounded-md bg-teal-500/20 text-teal-300 text-xs font-bold uppercase tracking-wider">6 Cities + Curved Highways</span>
+        <span class="px-2.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 text-xs font-bold uppercase tracking-wider">Taxi & Race</span>
+      </div>
+      <h1 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">Highway & Cities Free Roam 3D</h1>
+      <p class="text-sm text-slate-300 mt-2 leading-relaxed">
+        You start outside your <strong>Sunport Home</strong> with your car parked beside the driveway. Walk around, enter/exit your Home or Fuel/Repair shops, hop into your car, pick up long-distance <strong>Taxi</strong> passengers across 6 cities, or enter <strong>Highway Circuit Races</strong>.
+      </p>
+      <div class="grid grid-cols-2 gap-2.5 mt-4 text-xs">
+        <div class="bg-slate-800/80 border border-slate-700/80 rounded-xl p-3">
+          <div class="font-bold text-teal-300 mb-1">Desktop Keys</div>
+          <ul class="space-y-1 text-slate-300">
+            <li><span class="mono text-white font-semibold">WASD / Arrows</span> — Walk / Drive</li>
+            <li><span class="mono text-white font-semibold">V</span> — Enter/Exit Car | <span class="mono text-white font-semibold">T</span> — Doors</li>
+            <li><span class="mono text-white font-semibold">J</span> — Taxi | <span class="mono text-white font-semibold">B</span> — Race | <span class="mono text-white font-semibold">M</span> — Map</li>
+            <li><span class="mono text-white font-semibold">Space</span> — Drift | <span class="mono text-white font-semibold">Z/X</span> — Gears</li>
+          </ul>
+        </div>
+        <div class="bg-slate-800/80 border border-slate-700/80 rounded-xl p-3">
+          <div class="font-bold text-amber-300 mb-1">Touch Controls</div>
+          <ul class="space-y-1 text-slate-300">
+            <li>• Tap <strong>Get In Car</strong> beside your car</li>
+            <li>• Large <strong>GO</strong>, <strong>STOP</strong>, <strong>◀ ▶</strong> & <strong>DRIFT</strong></li>
+            <li>• Tap <strong>Enter Door</strong> at Home/Shops</li>
+            <li>• Tap <strong>Map</strong> to drop GPS pins</li>
+          </ul>
+        </div>
+      </div>
+      <div class="mt-5 flex items-center justify-end gap-2">
+        <button id="btn-welcome-fs" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold py-2.5 px-3.5 rounded-xl text-xs border border-slate-700 cursor-pointer">
+          Fullscreen
+        </button>
+        <button id="btn-start-game" class="bg-teal-500 hover:bg-teal-400 text-slate-950 font-extrabold py-2.5 px-5 rounded-xl text-sm transition cursor-pointer">
+          Start Playing →
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /**
+     * HIGHWAY & CITIES FREE ROAM 3D
+     * Single-file Three.js r128 open-world driving, taxi & racing sandbox.
+     */
+
+    // =========================================================================
+    // 1. PERSISTENT SAVE, VEHICLES & PAINT CONFIGURATION
+    // =========================================================================
+    const STORAGE_KEY = 'highway_cities_free_roam_v2';
+
+    const PAINT_COLORS = [
+      { id: 'glacier', name: 'Glacier White', hex: 0xf8fafc, css: '#f8fafc' },
+      { id: 'slate', name: 'Matte Slate', hex: 0x334155, css: '#334155' },
+      { id: 'cobalt', name: 'Cobalt Blue', hex: 0x0284c7, css: '#0284c7' },
+      { id: 'forest', name: 'Forest Green', hex: 0x15803d, css: '#15803d' },
+      { id: 'crimson', name: 'Crimson Red', hex: 0xb91c1c, css: '#b91c1c' },
+      { id: 'sand', name: 'Sand Beige', hex: 0xd6c7b2, css: '#d6c7b2' }
+    ];
+
+    const VEHICLES = [
+      {
+        id: 'compact',
+        name: 'Metro Compact',
+        role: 'Nimble City & Taxi Hatch',
+        price: 0,
+        topSpeed: 35,
+        accel: 25,
+        handling: 2.75,
+        accent: 0x0f172a,
+        length: 4.1,
+        width: 1.85,
+        height: 1.35
+      },
+      {
+        id: 'sedan',
+        name: 'Crown Touring',
+        role: 'Highway Executive Taxi',
+        price: 900,
+        topSpeed: 41,
+        accel: 29,
+        handling: 2.88,
+        accent: 0x0d9488,
+        length: 4.55,
+        width: 1.92,
+        height: 1.32
+      },
+      {
+        id: 'pickup',
+        name: 'Outback Cruiser',
+        role: 'All-Corridor Utility 4x4',
+        price: 1800,
+        topSpeed: 38,
+        accel: 27,
+        handling: 2.6,
+        accent: 0x1e293b,
+        length: 4.9,
+        width: 2.04,
+        height: 1.62
+      },
+      {
+        id: 'rally',
+        name: 'Dune Rally RS',
+        role: 'Sweeping Corner Specialist',
+        price: 2600,
+        topSpeed: 44,
+        accel: 34,
+        handling: 3.18,
+        accent: 0xf59e0b,
+        length: 4.3,
+        width: 1.94,
+        height: 1.3
+      },
+      {
+        id: 'gt',
+        name: 'Apex GT Interceptor',
+        role: 'High-Speed Highway Coupe',
+        price: 3500,
+        topSpeed: 49,
+        accel: 37,
+        handling: 3.12,
+        accent: 0x14b8a6,
+        length: 4.45,
+        width: 1.96,
+        height: 1.2
+      },
+      {
+        id: 'hyper',
+        name: 'Vortex Hyper EV',
+        role: 'Instant-Torque Circuit Racer',
+        price: 4800,
+        topSpeed: 54,
+        accel: 43,
+        handling: 3.28,
+        accent: 0x38bdf8,
+        length: 4.5,
+        width: 2.0,
+        height: 1.16
+      }
+    ];
+
+    const UPGRADE_DEFS = [
+      { id: 'engine', name: 'Engine & Turbo', desc: '+10% Top Speed & Accel', baseCost: 350, maxLevel: 4 },
+      { id: 'grip', name: 'Brakes & Tires', desc: '+12% Grip & Wet Traction', baseCost: 300, maxLevel: 4 },
+      { id: 'chassis', name: 'Fuel Tank & Armor', desc: '+20% Fuel & Impact Shield', baseCost: 300, maxLevel: 4 },
+      { id: 'cruise', name: 'Taxi & Cruise Meter', desc: '+20% Taxi Fare & Cruise Pay', baseCost: 350, maxLevel: 4 }
+    ];
+
+    const GEAR_RATIOS = {
+      1: 0.42,
+      2: 0.72,
+      3: 1.00,
+      4: 1.38,
+      5: 1.78,
+      6: 2.35
+    };
+
+    let playerSave = {
+      cash: 500,
+      selectedVehicle: 'compact',
+      ownedVehicles: ['compact'],
+      paintId: 'glacier',
+      upgrades: { engine: 0, grip: 0, chassis: 0, cruise: 0 },
+      collectedEmblems: [],
+      bestRadarSpeed: 0,
+      taxiTripsCompleted: 0,
+      chillMode: false,
+      weatherIdx: 0,
+      tutorialDone: false
+    };
+
+    function loadSave() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          playerSave = {
+            ...playerSave,
+            ...parsed,
+            upgrades: { ...playerSave.upgrades, ...(parsed.upgrades || {}) },
+            collectedEmblems: Array.isArray(parsed.collectedEmblems) ? parsed.collectedEmblems : []
+          };
+        }
+      } catch (e) {
+        console.warn('Save load error:', e);
+      }
+    }
+
+    function persistSave() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(playerSave));
+      } catch (e) {
+        console.warn('Save write error:', e);
+      }
+    }
+
+    loadSave();
+
+    // =========================================================================
+    // 2. PROCEDURAL WEB AUDIO ENGINE
+    // =========================================================================
+    class SoundEngine {
+      constructor() {
+        this.ctx = null;
+        this.enabled = true;
+        this.engineOsc = null;
+        this.engineGain = null;
+        this.screechGain = null;
+        this.initialized = false;
+      }
+
+      init() {
+        if (this.initialized) {
+          if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+          return;
+        }
+        try {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          this.ctx = new AudioCtx();
+
+          this.engineOsc = this.ctx.createOscillator();
+          this.engineOsc.type = 'sawtooth';
+          this.engineOsc.frequency.value = 46;
+
+          const filter = this.ctx.createBiquadFilter();
+          filter.type = 'lowpass';
+          filter.frequency.value = 210;
+
+          this.engineGain = this.ctx.createGain();
+          this.engineGain.gain.value = 0;
+
+          this.engineOsc.connect(filter);
+          filter.connect(this.engineGain);
+          this.engineGain.connect(this.ctx.destination);
+          this.engineOsc.start();
+
+          const bufferSize = this.ctx.sampleRate * 1.5;
+          const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+          const output = noiseBuffer.getChannelData(0);
+          for (let i = 0; i < bufferSize; i++) output[i] = Math.random() * 2 - 1;
+
+          const whiteNoise = this.ctx.createBufferSource();
+          whiteNoise.buffer = noiseBuffer;
+          whiteNoise.loop = true;
+
+          const screechFilter = this.ctx.createBiquadFilter();
+          screechFilter.type = 'bandpass';
+          screechFilter.frequency.value = 1450;
+          screechFilter.Q.value = 6.0;
+
+          this.screechGain = this.ctx.createGain();
+          this.screechGain.gain.value = 0;
+
+          whiteNoise.connect(screechFilter);
+          screechFilter.connect(this.screechGain);
+          this.screechGain.connect(this.ctx.destination);
+          whiteNoise.start();
+
+          this.initialized = true;
+        } catch (e) {
+          console.warn('Web Audio unavailable:', e);
+        }
+      }
+
+      toggle() {
+        this.enabled = !this.enabled;
+        const lbl = document.getElementById('audio-icon');
+        if (lbl) lbl.textContent = this.enabled ? 'ON' : 'OFF';
+        if (!this.enabled && this.engineGain) {
+          this.engineGain.gain.value = 0;
+          this.screechGain.gain.value = 0;
+        }
+      }
+
+      updateEngine(speedRatio, isDrifting, isDriving) {
+        if (!this.initialized || !this.enabled || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        if (!isDriving) {
+          this.engineGain.gain.setTargetAtTime(0, now, 0.08);
+          this.screechGain.gain.setTargetAtTime(0, now, 0.05);
+          return;
+        }
+        const gearMod = (speedRatio * 4.0) % 1;
+        const targetFreq = 44 + speedRatio * 64 + gearMod * 30;
+        this.engineOsc.frequency.setTargetAtTime(targetFreq, now, 0.06);
+        this.engineGain.gain.setTargetAtTime(0.022 + speedRatio * 0.032, now, 0.08);
+
+        const targetScreech = isDrifting && speedRatio > 0.2 ? 0.028 : 0;
+        this.screechGain.gain.setTargetAtTime(targetScreech, now, 0.05);
+      }
+
+      playTone(freq, duration, type = 'sine', vol = 0.08, slideTo = null) {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, now);
+        if (slideTo) osc.frequency.exponentialRampToValueAtTime(slideTo, now + duration);
+
+        gain.gain.setValueAtTime(vol, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + duration);
+      }
+
+      playBlinker(high) {
+        this.playTone(high ? 880 : 660, 0.03, 'triangle', 0.035);
+      }
+
+      playHorn() {
+        this.playTone(390, 0.26, 'sawtooth', 0.07);
+        this.playTone(490, 0.26, 'sawtooth', 0.06);
+      }
+
+      playCollision() {
+        this.playTone(130, 0.24, 'sawtooth', 0.14, 38);
+      }
+
+      playPin() {
+        this.playTone(587.33, 0.1, 'sine', 0.08);
+        setTimeout(() => this.playTone(880, 0.14, 'sine', 0.08), 80);
+      }
+
+      playCollectible() {
+        this.playTone(523.25, 0.12, 'triangle', 0.09);
+        setTimeout(() => this.playTone(659.25, 0.12, 'triangle', 0.09), 90);
+        setTimeout(() => this.playTone(783.99, 0.14, 'triangle', 0.09), 180);
+        setTimeout(() => this.playTone(1046.5, 0.24, 'triangle', 0.1), 270);
+      }
+
+      playService() {
+        this.playTone(440, 0.14, 'sine', 0.07, 660);
+      }
+    }
+
+    const sfx = new SoundEngine();
+
+    // =========================================================================
+    // 3. 28x28 MULTI-CITY & GTA-STYLE CURVED HIGHWAY NETWORK (6 CITIES)
+    // =========================================================================
+    const GRID_N = 28;
+    const TILE_SIZE = 90;
+    const CITY_ROAD_W = 20;
+    const HWY_ROAD_W = 28;
+    const CITY_LANE_OFF = 4.4;
+    const HWY_LANE_OFF = 6.2;
+
+    // 28x28 world with 6 cities/hubs + sweeping S-bend & perimeter curved highways
+    const RAW_GRID = [
+      '..HHHHHHHHHHHHHHHHHHHHHHHH..',
+      '.HH......................HH.',
+      '.H..CCCCCC........CCCC....H.',
+      '.H..CBBBBCC..HHH..CBBCC...H.',
+      '.H..CBPPBC..HH.HH.CBBCC...H.',
+      '.H..CBPPBC..H...H.CCCC....H.',
+      '.H..CCCCCC..H...H..H......H.',
+      '.H....H.....H...HHHH......H.',
+      '.H....HHHHHHH.............H.',
+      '.H..........H.............H.',
+      '.HHH........HHHHHHH.......H.',
+      '...HH.............H.......H.',
+      '.CCCC.H...........H...CCCC..',
+      '.CBBC.H...........H...CBBC..',
+      '.CBBC.HHHH.....HHHH...CBBC..',
+      '.CCCC....H.....H......CCCC..',
+      '.........H.....H............',
+      '.H.......HHHHHHH.......HHHH.',
+      '.H..........H..........H..H.',
+      '.H....CCCC..H....CCCC..H..H.',
+      '.H....CBBCC.H....CBBCC.H..H.',
+      '.H....CBPPBC.....CBPPBC...H.',
+      '.H....CBMFBC.....CBMPCC...H.',
+      '.H....CCCCCC.....CCCCCC...H.',
+      '.HH........H.....H.......HH.',
+      '..HHHHHHHHHHHHHHHHHHHHHHHH..',
+      '............................',
+      '............................'
+    ];
+
+    const GRID = RAW_GRID.map((row) => row.split(''));
+
+    // Connect outer highways to all 6 cities cleanly with curves
+    // 1. Northridge Metro (NW: gx 4..9, gz 2..6)
+    GRID[4][6] = 'O';
+    GRID[3][8] = 'F';
+    GRID[5][5] = 'M';
+
+    // 2. Pine Valley Hub (NE: gx 18..22, gz 2..5)
+    GRID[4][20] = 'O';
+    GRID[3][21] = 'F';
+    GRID[5][19] = 'M';
+
+    // 3. Westport Bay (Mid-West: gx 1..4, gz 12..15)
+    GRID[12][5] = 'H';
+    GRID[13][5] = 'H';
+    GRID[13][2] = 'O';
+    GRID[14][2] = 'F';
+
+    // 4. Eastgate Heights (Mid-East: gx 22..25, gz 12..15)
+    GRID[13][19] = 'H';
+    GRID[13][20] = 'H';
+    GRID[13][21] = 'H';
+    GRID[13][23] = 'O';
+    GRID[14][24] = 'M';
+
+    // 5. Sunport City (SW: gx 6..11, gz 19..23)
+    GRID[21][12] = 'H';
+    GRID[21][8] = 'O';
+    GRID[22][7] = 'M';
+    GRID[22][9] = 'F';
+
+    // 6. Harbor Industrial (SE: gx 17..22, gz 19..23)
+    GRID[21][23] = 'H';
+    GRID[21][19] = 'O';
+    GRID[22][18] = 'M';
+    GRID[22][20] = 'P';
+    GRID[20][21] = 'F';
+
+    // Central S-bend expressway link
+    GRID[14][10] = 'H';
+    GRID[15][10] = 'H';
+    GRID[16][10] = 'H';
+    GRID[17][10] = 'H';
+
+    // Highway Rest Stops
+    GRID[0][14] = 'F';
+    GRID[25][14] = 'M';
+
+    const CITY_HUBS = [
+      { name: 'Sunport City', gx: 8, gz: 21 },
+      { name: 'Northridge Metro', gx: 6, gz: 4 },
+      { name: 'Harbor Industrial', gx: 19, gz: 21 },
+      { name: 'Pine Valley Hub', gx: 20, gz: 4 },
+      { name: 'Westport Bay', gx: 2, gz: 13 },
+      { name: 'Eastgate Heights', gx: 23, gz: 13 }
+    ];
+
+    function getZoneName(gx, gz) {
+      if (gx >= 5 && gx <= 11 && gz >= 19 && gz <= 23) return 'Sunport City';
+      if (gx >= 4 && gx <= 9 && gz >= 2 && gz <= 6) return 'Northridge Metro';
+      if (gx >= 17 && gx <= 22 && gz >= 19 && gz <= 23) return 'Harbor Industrial';
+      if (gx >= 18 && gx <= 22 && gz >= 2 && gz <= 5) return 'Pine Valley Hub';
+      if (gx >= 1 && gx <= 4 && gz >= 12 && gz <= 15) return 'Westport Bay';
+      if (gx >= 22 && gx <= 25 && gz >= 12 && gz <= 15) return 'Eastgate Heights';
+      if (GRID[gz] && GRID[gz][gx] === 'H') return 'Coastal & S-Bend Hwy';
+      return 'Scenic Countryside';
+    }
+
+    function isHighwayCell(gx, gz) {
+      if (gx < 0 || gx >= GRID_N || gz < 0 || gz >= GRID_N) return false;
+      return GRID[gz][gx] === 'H';
+    }
+
+    function isRoadCell(gx, gz) {
+      if (gx < 0 || gx >= GRID_N || gz < 0 || gz >= GRID_N) return false;
+      const t = GRID[gz][gx];
+      return t === 'C' || t === 'H' || t === 'O';
+    }
+
+    function gridToWorld(gx, gz) {
+      const half = (GRID_N - 1) * 0.5;
+      return {
+        x: (gx - half) * TILE_SIZE,
+        z: (gz - half) * TILE_SIZE
+      };
+    }
+
+    function worldToGrid(x, z) {
+      const half = (GRID_N - 1) * 0.5;
+      return {
+        gx: Math.max(0, Math.min(GRID_N - 1, Math.round(x / TILE_SIZE + half))),
+        gz: Math.max(0, Math.min(GRID_N - 1, Math.round(z / TILE_SIZE + half)))
+      };
+    }
+
+    // =========================================================================
+    // 4. THREE.JS SCENE, LIGHTING, WEATHER PRESETS & CURVED GTA-STYLE ROADS
+    // =========================================================================
+    const canvas = document.getElementById('game-canvas');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xcbd9e6);
+    scene.fog = new THREE.FogExp2(0xcbd9e6, 0.0014);
+
+    const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.5, 680);
+
+    const hemiLight = new THREE.HemisphereLight(0xf1f5f9, 0x64748b, 0.88);
+    hemiLight.position.set(0, 160, 0);
+    scene.add(hemiLight);
+
+    const sunLight = new THREE.DirectionalLight(0xfffbeb, 0.96);
+    sunLight.position.set(160, 220, 140);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.width = 2048;
+    sunLight.shadow.mapSize.height = 2048;
+    sunLight.shadow.camera.near = 20;
+    sunLight.shadow.camera.far = 560;
+    const shadowBound = 240;
+    sunLight.shadow.camera.left = -shadowBound;
+    sunLight.shadow.camera.right = shadowBound;
+    sunLight.shadow.camera.top = shadowBound;
+    sunLight.shadow.camera.bottom = -shadowBound;
+    sunLight.shadow.bias = -0.0005;
+    scene.add(sunLight);
+
+    // 3D Rain Particles
+    const RAIN_COUNT = 1500;
+    const rainGeo = new THREE.BufferGeometry();
+    const rainPositions = new Float32Array(RAIN_COUNT * 3);
+    for (let i = 0; i < RAIN_COUNT; i++) {
+      rainPositions[i * 3] = (Math.random() - 0.5) * 160;
+      rainPositions[i * 3 + 1] = Math.random() * 65;
+      rainPositions[i * 3 + 2] = (Math.random() - 0.5) * 160;
+    }
+    rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPositions, 3));
+    const rainMat = new THREE.PointsMaterial({
+      color: 0xe2e8f0,
+      size: 0.45,
+      transparent: true,
+      opacity: 0.65
+    });
+    const rainSystem = new THREE.Points(rainGeo, rainMat);
+    rainSystem.visible = false;
+    scene.add(rainSystem);
+
+    const WEATHER_MODES = [
+      {
+        id: 'morning',
+        label: 'Morning',
+        skyHex: 0xcbd9e6,
+        fogDensity: 0.0014,
+        hemiSky: 0xf1f5f9,
+        hemiGround: 0x64748b,
+        hemiInt: 0.88,
+        sunColor: 0xfffbeb,
+        sunInt: 0.96,
+        sunPos: [160, 220, 140],
+        gripMult: 1.0,
+        headlightsOn: false
+      },
+      {
+        id: 'sunset',
+        label: 'Sunset',
+        skyHex: 0xfdba74,
+        fogDensity: 0.0018,
+        hemiSky: 0xfed7aa,
+        hemiGround: 0x475569,
+        hemiInt: 0.78,
+        sunColor: 0xf97316,
+        sunInt: 1.05,
+        sunPos: [220, 76, 150],
+        gripMult: 1.0,
+        headlightsOn: true
+      },
+      {
+        id: 'rain',
+        label: 'Rain',
+        skyHex: 0x64748b,
+        fogDensity: 0.0028,
+        hemiSky: 0x94a3b8,
+        hemiGround: 0x334155,
+        hemiInt: 0.72,
+        sunColor: 0xcbd5e1,
+        sunInt: 0.45,
+        sunPos: [100, 180, 80],
+        gripMult: 0.84,
+        headlightsOn: true
+      },
+      {
+        id: 'night',
+        label: 'Night',
+        skyHex: 0x0f172a,
+        fogDensity: 0.0024,
+        hemiSky: 0x334155,
+        hemiGround: 0x0f172a,
+        hemiInt: 0.45,
+        sunColor: 0x93c5fd,
+        sunInt: 0.28,
+        sunPos: [-120, 180, -90],
+        gripMult: 0.96,
+        headlightsOn: true
+      }
+    ];
+    let currentWeatherIdx = playerSave.weatherIdx || 0;
+
+    function applyWeatherPreset(idx) {
+      currentWeatherIdx = idx % WEATHER_MODES.length;
+      playerSave.weatherIdx = currentWeatherIdx;
+      persistSave();
+
+      const w = WEATHER_MODES[currentWeatherIdx];
+      scene.background.setHex(w.skyHex);
+      scene.fog.color.setHex(w.skyHex);
+      scene.fog.density = w.fogDensity;
+      hemiLight.color.setHex(w.hemiSky);
+      hemiLight.groundColor.setHex(w.hemiGround);
+      hemiLight.intensity = w.hemiInt;
+      sunLight.color.setHex(w.sunColor);
+      sunLight.intensity = w.sunInt;
+      sunLight.position.set(...w.sunPos);
+      rainSystem.visible = w.id === 'rain';
+
+      const wLbl = document.getElementById('weather-label');
+      if (wLbl) wLbl.textContent = w.label;
+    }
+
+    // Procedural Road Tile Texture with Smooth Circular Sweeping Arcs for 90-degree Turns
+    function createRoadTileTexture(n, s, e, w, isRoundabout, isHighway) {
+      const c = document.createElement('canvas');
+      c.width = 512;
+      c.height = 512;
+      const ctx = c.getContext('2d');
+
+      ctx.fillStyle = isHighway ? '#6e8b74' : '#cbd5e1';
+      ctx.fillRect(0, 0, 512, 512);
+
+      const scale = 512 / TILE_SIZE;
+      const roadW = (isHighway ? HWY_ROAD_W : CITY_ROAD_W) * scale;
+      const laneOff = (isHighway ? HWY_LANE_OFF : CITY_LANE_OFF) * scale;
+      const half = 256;
+      const rHalf = roadW / 2;
+      const curb = 6;
+      const armCount = (n ? 1 : 0) + (s ? 1 : 0) + (e ? 1 : 0) + (w ? 1 : 0);
+
+      // Detect 90-degree corner turn (e.g. N+E, E+S, S+W, W+N) and render smooth GTA-style circular curve!
+      const isCorner = !isRoundabout && armCount === 2 && ((n && e) || (e && s) || (s && w) || (w && n));
+      if (isCorner) {
+        let cx = 0;
+        let cy = 0;
+        let startAng = 0;
+        let endAng = Math.PI / 2;
+        if (n && e) {
+          cx = 512; cy = 0; startAng = Math.PI / 2; endAng = Math.PI;
+        } else if (e && s) {
+          cx = 512; cy = 512; startAng = Math.PI; endAng = Math.PI * 1.5;
+        } else if (s && w) {
+          cx = 0; cy = 512; startAng = Math.PI * 1.5; endAng = Math.PI * 2;
+        } else if (w && n) {
+          cx = 0; cy = 0; startAng = 0; endAng = Math.PI / 2;
+        }
+
+        // Curb arc
+        ctx.strokeStyle = '#64748b';
+        ctx.lineWidth = roadW + curb * 2;
+        ctx.lineCap = 'butt';
+        ctx.beginPath();
+        ctx.arc(cx, cy, half, startAng, endAng);
+        ctx.stroke();
+
+        // Asphalt arc
+        ctx.strokeStyle = isHighway ? '#1e293b' : '#27303f';
+        ctx.lineWidth = roadW;
+        ctx.beginPath();
+        ctx.arc(cx, cy, half, startAng, endAng);
+        ctx.stroke();
+
+        // Edge lines
+        ctx.strokeStyle = 'rgba(241, 245, 249, 0.82)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(cx, cy, half - rHalf + 7, startAng, endAng);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(cx, cy, half + rHalf - 7, startAng, endAng);
+        ctx.stroke();
+
+        // Center double median curve
+        ctx.strokeStyle = isHighway ? '#f8fafc' : '#eab308';
+        ctx.lineWidth = isHighway ? 3.5 : 2.5;
+        ctx.beginPath();
+        ctx.arc(cx, cy, half - 2.5, startAng, endAng);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(cx, cy, half + 2.5, startAng, endAng);
+        ctx.stroke();
+
+        return new THREE.CanvasTexture(c);
+      }
+
+      // Shoulder / curb for straight & junction tiles
+      ctx.fillStyle = '#64748b';
+      if (isRoundabout) {
+        ctx.beginPath();
+        ctx.arc(half, half, 190 + curb, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      if (n) ctx.fillRect(half - rHalf - curb, 0, roadW + curb * 2, half + rHalf + curb);
+      if (s) ctx.fillRect(half - rHalf - curb, half - rHalf - curb, roadW + curb * 2, half + rHalf + curb);
+      if (w) ctx.fillRect(0, half - rHalf - curb, half + rHalf + curb, roadW + curb * 2);
+      if (e) ctx.fillRect(half - rHalf - curb, half - rHalf - curb, half + rHalf + curb, roadW + curb * 2);
+
+      // Asphalt surface
+      ctx.fillStyle = isHighway ? '#1e293b' : '#27303f';
+      if (isRoundabout) {
+        ctx.beginPath();
+        ctx.arc(half, half, 190, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      if (n) ctx.fillRect(half - rHalf, 0, roadW, half + rHalf);
+      if (s) ctx.fillRect(half - rHalf, half - rHalf, roadW, half + rHalf);
+      if (w) ctx.fillRect(0, half - rHalf, half + rHalf, roadW);
+      if (e) ctx.fillRect(half - rHalf, half - rHalf, half + rHalf, roadW);
+      ctx.fillRect(half - rHalf, half - rHalf, roadW, roadW);
+
+      if (isRoundabout) {
+        ctx.strokeStyle = '#e2e8f0';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([14, 14]);
+        ctx.beginPath();
+        ctx.arc(half, half, 144, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.fillStyle = '#4d7c5b';
+        ctx.beginPath();
+        ctx.arc(half, half, 92, 0, Math.PI * 2);
+        ctx.fill();
+        return new THREE.CanvasTexture(c);
+      }
+
+      const isJunction = !isHighway && armCount >= 3;
+
+      const drawArm = (dir) => {
+        ctx.save();
+        ctx.translate(half, half);
+        if (dir === 'E') ctx.rotate(Math.PI / 2);
+        if (dir === 'S') ctx.rotate(Math.PI);
+        if (dir === 'W') ctx.rotate(-Math.PI / 2);
+
+        const startY = isJunction ? rHalf + 24 : 0;
+        const endY = half;
+
+        ctx.strokeStyle = 'rgba(241, 245, 249, 0.8)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(-rHalf + 7, startY); ctx.lineTo(-rHalf + 7, endY);
+        ctx.moveTo(rHalf - 7, startY); ctx.lineTo(rHalf - 7, endY);
+        ctx.stroke();
+
+        ctx.strokeStyle = isHighway ? '#f8fafc' : '#eab308';
+        ctx.lineWidth = isHighway ? 4 : 2.5;
+        ctx.beginPath();
+        ctx.moveTo(-2.5, startY); ctx.lineTo(-2.5, endY);
+        ctx.moveTo(2.5, startY); ctx.lineTo(2.5, endY);
+        ctx.stroke();
+
+        if (isHighway) {
+          ctx.strokeStyle = 'rgba(226, 232, 240, 0.55)';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([12, 12]);
+          ctx.beginPath();
+          ctx.moveTo(-rHalf * 0.52, startY); ctx.lineTo(-rHalf * 0.52, endY);
+          ctx.moveTo(rHalf * 0.52, startY); ctx.lineTo(rHalf * 0.52, endY);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
+        ctx.fillStyle = 'rgba(248, 250, 252, 0.65)';
+        drawArrow(ctx, -laneOff, (startY + endY) * 0.55, 0);
+        drawArrow(ctx, laneOff, (startY + endY) * 0.55, Math.PI);
+
+        if (isJunction) {
+          ctx.fillStyle = '#f8fafc';
+          ctx.fillRect(2, rHalf + 20, rHalf - 9, 5);
+          ctx.fillStyle = 'rgba(248, 250, 252, 0.8)';
+          for (let x = -rHalf + 10; x < rHalf - 10; x += 14) {
+            ctx.fillRect(x, rHalf + 4, 8, 12);
+          }
+        }
+        ctx.restore();
+      };
+
+      if (n) drawArm('N');
+      if (s) drawArm('S');
+      if (e) drawArm('E');
+      if (w) drawArm('W');
+
+      return new THREE.CanvasTexture(c);
+    }
+
+    function drawArrow(ctx, x, y, rot) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(rot);
+      ctx.beginPath();
+      ctx.moveTo(0, -13);
+      ctx.lineTo(7, -2);
+      ctx.lineTo(2.5, -2);
+      ctx.lineTo(2.5, 13);
+      ctx.lineTo(-2.5, 13);
+      ctx.lineTo(-2.5, -2);
+      ctx.lineTo(-7, -2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // =========================================================================
+    // 5. BUILD 28x28 WORLD, VISIBLE ENTERABLE DOORS & INTERIORS
+    // =========================================================================
+    const colliders = [];
+    const trafficLights = [];
+    const serviceStations = [];
+    const streetLampBulbs = [];
+    const cullableGroups = [];
+    const interactiveDoors = []; // { id, label, type, x, z, interiorX, interiorZ, ringMesh }
+
+    // Helper to build a visible 3D door with frame, window, handle & glowing threshold ring
+    function createVisibleDoor(parentGroup, localX, localZ, rotY, doorColorHex, ringColorHex) {
+      const doorGroup = new THREE.Group();
+      doorGroup.position.set(localX, 0, localZ);
+      doorGroup.rotation.y = rotY;
+
+      const frame = new THREE.Mesh(
+        new THREE.BoxGeometry(2.1, 3.3, 0.35),
+        new THREE.MeshLambertMaterial({ color: 0x1e293b })
+      );
+      frame.position.y = 1.65;
+      doorGroup.add(frame);
+
+      const panel = new THREE.Mesh(
+        new THREE.BoxGeometry(1.75, 3.05, 0.42),
+        new THREE.MeshLambertMaterial({ color: doorColorHex })
+      );
+      panel.position.y = 1.55;
+      doorGroup.add(panel);
+
+      const glass = new THREE.Mesh(
+        new THREE.BoxGeometry(1.1, 1.0, 0.46),
+        new THREE.MeshBasicMaterial({ color: 0xbae6fd })
+      );
+      glass.position.y = 2.25;
+      doorGroup.add(glass);
+
+      const handle = new THREE.Mesh(
+        new THREE.BoxGeometry(0.14, 0.45, 0.52),
+        new THREE.MeshLambertMaterial({ color: 0xfbbf24 })
+      );
+      handle.position.set(0.62, 1.45, 0);
+      doorGroup.add(handle);
+
+      const ringGeo = new THREE.RingGeometry(1.35, 1.85, 24);
+      ringGeo.rotateX(-Math.PI / 2);
+      const ringMesh = new THREE.Mesh(
+        ringGeo,
+        new THREE.MeshBasicMaterial({ color: ringColorHex, side: THREE.DoubleSide, transparent: true, opacity: 0.9 })
+      );
+      ringMesh.position.set(0, 0.08, 1.8);
+      doorGroup.add(ringMesh);
+
+      parentGroup.add(doorGroup);
+      return ringMesh;
+    }
+
+    // Build furnished, lit interior rooms far off-map (z = 2100) for Home & Shops
+    const HOME_INTERIOR_POS = { x: -400, z: 2100 };
+    const SHOP_INTERIOR_POS = { x: 400, z: 2100 };
+
+    function buildInteriors() {
+      // 1. Player Home Interior
+      const homeRoom = new THREE.Group();
+      homeRoom.position.set(HOME_INTERIOR_POS.x, 0, HOME_INTERIOR_POS.z);
+
+      const floor = new THREE.Mesh(
+        new THREE.PlaneGeometry(18, 18),
+        new THREE.MeshLambertMaterial({ color: 0xd6c7b2 })
+      );
+      floor.rotation.x = -Math.PI / 2;
+      homeRoom.add(floor);
+
+      const wallMat = new THREE.MeshLambertMaterial({ color: 0xf1f5f9 });
+      [
+        { x: 0, z: -9, w: 18, d: 0.6 },
+        { x: 0, z: 9, w: 18, d: 0.6 },
+        { x: -9, z: 0, w: 0.6, d: 18 },
+        { x: 9, z: 0, w: 0.6, d: 18 }
+      ].forEach((w) => {
+        const wm = new THREE.Mesh(new THREE.BoxGeometry(w.w, 5, w.d), wallMat);
+        wm.position.set(w.x, 2.5, w.z);
+        homeRoom.add(wm);
+      });
+
+      // Bed & Table props
+      const bed = new THREE.Mesh(
+        new THREE.BoxGeometry(4.2, 1.1, 3.0),
+        new THREE.MeshLambertMaterial({ color: 0x0284c7 })
+      );
+      bed.position.set(-5.5, 0.55, -5.5);
+      homeRoom.add(bed);
+
+      const table = new THREE.Mesh(
+        new THREE.BoxGeometry(3.2, 1.2, 2.0),
+        new THREE.MeshLambertMaterial({ color: 0x78350f })
+      );
+      table.position.set(5.2, 0.6, -5.0);
+      homeRoom.add(table);
+
+      const exitRing = createVisibleDoor(homeRoom, 0, 8.6, Math.PI, 0x0f766e, 0x14b8a6);
+      scene.add(homeRoom);
+
+      interactiveDoors.push({
+        id: 'home_exit',
+        label: 'Exit Home',
+        type: 'HOME_EXIT',
+        x: HOME_INTERIOR_POS.x,
+        z: HOME_INTERIOR_POS.z + 6.8,
+        ringMesh: exitRing
+      });
+
+      // 2. Service Shop Interior
+      const shopRoom = new THREE.Group();
+      shopRoom.position.set(SHOP_INTERIOR_POS.x, 0, SHOP_INTERIOR_POS.z);
+
+      const sFloor = new THREE.Mesh(
+        new THREE.PlaneGeometry(20, 16),
+        new THREE.MeshLambertMaterial({ color: 0x94a3b8 })
+      );
+      sFloor.rotation.x = -Math.PI / 2;
+      shopRoom.add(sFloor);
+
+      const sWallMat = new THREE.MeshLambertMaterial({ color: 0xe2e8f0 });
+      [
+        { x: 0, z: -8, w: 20, d: 0.6 },
+        { x: 0, z: 8, w: 20, d: 0.6 },
+        { x: -10, z: 0, w: 0.6, d: 16 },
+        { x: 10, z: 0, w: 0.6, d: 16 }
+      ].forEach((w) => {
+        const wm = new THREE.Mesh(new THREE.BoxGeometry(w.w, 5, w.d), sWallMat);
+        wm.position.set(w.x, 2.5, w.z);
+        shopRoom.add(wm);
+      });
+
+      const counter = new THREE.Mesh(
+        new THREE.BoxGeometry(8, 1.4, 1.6),
+        new THREE.MeshLambertMaterial({ color: 0x059669 })
+      );
+      counter.position.set(0, 0.7, -4.5);
+      shopRoom.add(counter);
+
+      const shopExitRing = createVisibleDoor(shopRoom, 0, 7.6, Math.PI, 0xd97706, 0xf59e0b);
+      scene.add(shopRoom);
+
+      interactiveDoors.push({
+        id: 'shop_exit',
+        label: 'Exit Shop',
+        type: 'SHOP_EXIT',
+        x: SHOP_INTERIOR_POS.x,
+        z: SHOP_INTERIOR_POS.z + 5.8,
+        ringMesh: shopExitRing
+      });
+    }
+
+    function buildWorld() {
+      const worldSpan = GRID_N * TILE_SIZE;
+
+      const ground = new THREE.Mesh(
+        new THREE.PlaneGeometry(worldSpan + 500, worldSpan + 500),
+        new THREE.MeshLambertMaterial({ color: 0x7c9885 })
+      );
+      ground.rotation.x = -Math.PI / 2;
+      ground.position.y = -0.06;
+      ground.receiveShadow = true;
+      scene.add(ground);
+
+      const tileGeo = new THREE.PlaneGeometry(TILE_SIZE, TILE_SIZE);
+      const sidewalkMat = new THREE.MeshLambertMaterial({ color: 0xcbd5e1 });
+      const parkMat = new THREE.MeshLambertMaterial({ color: 0x5c8a68 });
+      const guardrailMat = new THREE.MeshLambertMaterial({ color: 0x94a3b8 });
+      const medianMat = new THREE.MeshLambertMaterial({ color: 0x475569 });
+
+      const buildingMatrices = [];
+      const treeTrunkMatrices = [];
+      const treeCrownMatrices = [];
+      const dummy = new THREE.Object3D();
+
+      let seed = 8821;
+      const rand = () => {
+        seed = (seed * 16807) % 2147483647;
+        return (seed - 1) / 2147483646;
+      };
+
+      for (let gz = 0; gz < GRID_N; gz++) {
+        for (let gx = 0; gx < GRID_N; gx++) {
+          const t = GRID[gz][gx];
+          const pos = gridToWorld(gx, gz);
+          const zone = getZoneName(gx, gz);
+
+          if (t === 'C' || t === 'H' || t === 'O') {
+            const n = isRoadCell(gx, gz - 1);
+            const s = isRoadCell(gx, gz + 1);
+            const e = isRoadCell(gx + 1, gz);
+            const w = isRoadCell(gx - 1, gz);
+            const isHwy = t === 'H';
+            const tex = createRoadTileTexture(n, s, e, w, t === 'O', isHwy);
+            const mesh = new THREE.Mesh(tileGeo, new THREE.MeshLambertMaterial({ map: tex }));
+            mesh.rotation.x = -Math.PI / 2;
+            mesh.position.set(pos.x, 0, pos.z);
+            mesh.receiveShadow = true;
+            scene.add(mesh);
+
+            if (t === 'O') {
+              const mon = new THREE.Mesh(
+                new THREE.CylinderGeometry(8, 9.2, 4, 16),
+                new THREE.MeshLambertMaterial({ color: 0x64748b })
+              );
+              mon.position.set(pos.x, 2, pos.z);
+              mon.castShadow = true;
+              scene.add(mon);
+
+              const spire = new THREE.Mesh(
+                new THREE.BoxGeometry(3.2, 16, 3.2),
+                new THREE.MeshLambertMaterial({ color: 0x0f766e })
+              );
+              spire.position.set(pos.x, 11, pos.z);
+              scene.add(spire);
+
+              colliders.push({
+                minX: pos.x - 11,
+                maxX: pos.x + 11,
+                minZ: pos.z - 11,
+                maxZ: pos.z + 11
+              });
+            }
+
+            if (isHwy) {
+              const hwyGroup = new THREE.Group();
+              hwyGroup.position.set(pos.x, 0, pos.z);
+
+              if ((e || w) && !n && !s) {
+                const med = new THREE.Mesh(new THREE.BoxGeometry(TILE_SIZE * 0.65, 0.55, 0.9), medianMat);
+                med.position.set(0, 0.28, 0);
+                hwyGroup.add(med);
+
+                const grN = new THREE.Mesh(new THREE.BoxGeometry(TILE_SIZE * 0.7, 0.7, 0.35), guardrailMat);
+                grN.position.set(0, 0.35, -HWY_ROAD_W / 2 - 1.2);
+                hwyGroup.add(grN);
+
+                const grS = new THREE.Mesh(new THREE.BoxGeometry(TILE_SIZE * 0.7, 0.7, 0.35), guardrailMat);
+                grS.position.set(0, 0.35, HWY_ROAD_W / 2 + 1.2);
+                hwyGroup.add(grS);
+              } else if ((n || s) && !e && !w) {
+                const med = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.55, TILE_SIZE * 0.65), medianMat);
+                med.position.set(0, 0.28, 0);
+                hwyGroup.add(med);
+
+                const grW = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.7, TILE_SIZE * 0.7), guardrailMat);
+                grW.position.set(-HWY_ROAD_W / 2 - 1.2, 0.35, 0);
+                hwyGroup.add(grW);
+
+                const grE = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.7, TILE_SIZE * 0.7), guardrailMat);
+                grE.position.set(HWY_ROAD_W / 2 + 1.2, 0.35, 0);
+                hwyGroup.add(grE);
+              }
+
+              if ((gx === 14 && gz === 0) || (gx === 14 && gz === 25) || (gx === 5 && gz === 12) || (gx === 21 && gz === 13)) {
+                addHighwaySignGantry(pos.x, pos.z, zone);
+              }
+
+              scene.add(hwyGroup);
+              cullableGroups.push({ group: hwyGroup, x: pos.x, z: pos.z });
+            } else if (t === 'C') {
+              const armCount = (n ? 1 : 0) + (s ? 1 : 0) + (e ? 1 : 0) + (w ? 1 : 0);
+              if (armCount >= 3) {
+                createIntersectionSignals(gx, gz, pos.x, pos.z, n, s, e, w, rand());
+              } else if (armCount === 2) {
+                addStreetLight(pos.x + 12, pos.z - 11.5);
+              }
+            }
+          } else if (t === 'F') {
+            const sw = new THREE.Mesh(tileGeo, sidewalkMat);
+            sw.rotation.x = -Math.PI / 2;
+            sw.position.set(pos.x, 0.02, pos.z);
+            scene.add(sw);
+            buildServiceStation(pos.x, pos.z, 'FUEL');
+          } else if (t === 'M') {
+            const sw = new THREE.Mesh(tileGeo, sidewalkMat);
+            sw.rotation.x = -Math.PI / 2;
+            sw.position.set(pos.x, 0.02, pos.z);
+            scene.add(sw);
+            buildServiceStation(pos.x, pos.z, 'REPAIR');
+          } else if (t === 'P') {
+            const lawn = new THREE.Mesh(new THREE.BoxGeometry(TILE_SIZE - 8, 0.25, TILE_SIZE - 8), parkMat);
+            lawn.position.set(pos.x, 0.12, pos.z);
+            lawn.receiveShadow = true;
+            scene.add(lawn);
+
+            for (let i = 0; i < 6; i++) {
+              const tx = pos.x + (rand() - 0.5) * (TILE_SIZE - 22);
+              const tz = pos.z + (rand() - 0.5) * (TILE_SIZE - 22);
+              const sc = 0.9 + rand() * 0.5;
+              dummy.position.set(tx, 1.5 * sc, tz);
+              dummy.scale.set(sc, sc, sc);
+              dummy.rotation.set(0, rand() * Math.PI, 0);
+              dummy.updateMatrix();
+              treeTrunkMatrices.push(dummy.matrix.clone());
+
+              dummy.position.set(tx, 4.2 * sc, tz);
+              dummy.scale.set(sc * 1.1, sc * 1.1, sc * 1.1);
+              dummy.updateMatrix();
+              treeCrownMatrices.push(dummy.matrix.clone());
+            }
+          } else if (t === 'B') {
+            const sw = new THREE.Mesh(tileGeo, sidewalkMat);
+            sw.rotation.x = -Math.PI / 2;
+            sw.position.set(pos.x, 0.02, pos.z);
+            scene.add(sw);
+
+            const subs = [
+              { dx: -18, dz: -18, w: 28, d: 28 },
+              { dx: 18, dz: -18, w: 28, d: 28 },
+              { dx: -18, dz: 18, w: 28, d: 28 },
+              { dx: 18, dz: 18, w: 28, d: 28 }
+            ];
+            subs.forEach((sub) => {
+              const h = 18 + Math.floor(rand() * 34);
+              dummy.position.set(pos.x + sub.dx, h / 2, pos.z + sub.dz);
+              dummy.scale.set(sub.w, h, sub.d);
+              dummy.rotation.set(0, 0, 0);
+              dummy.updateMatrix();
+              buildingMatrices.push(dummy.matrix.clone());
+
+              colliders.push({
+                minX: pos.x + sub.dx - sub.w / 2,
+                maxX: pos.x + sub.dx + sub.w / 2,
+                minZ: pos.z + sub.dz - sub.d / 2,
+                maxZ: pos.z + sub.dz + sub.d / 2
+              });
+            });
+          } else if (t === '.' && rand() < 0.35) {
+            for (let i = 0; i < 4; i++) {
+              const tx = pos.x + (rand() - 0.5) * 64;
+              const tz = pos.z + (rand() - 0.5) * 64;
+              const sc = 0.8 + rand() * 0.6;
+              dummy.position.set(tx, 1.5 * sc, tz);
+              dummy.scale.set(sc, sc, sc);
+              dummy.rotation.set(0, rand() * Math.PI, 0);
+              dummy.updateMatrix();
+              treeTrunkMatrices.push(dummy.matrix.clone());
+
+              dummy.position.set(tx, 4.1 * sc, tz);
+              dummy.scale.set(sc * 1.15, sc * 1.15, sc * 1.15);
+              dummy.updateMatrix();
+              treeCrownMatrices.push(dummy.matrix.clone());
+            }
+          }
+        }
+      }
+
+      if (buildingMatrices.length > 0) {
+        const bInst = new THREE.InstancedMesh(
+          new THREE.BoxGeometry(1, 1, 1),
+          new THREE.MeshLambertMaterial({ color: 0x94a3b8 }),
+          buildingMatrices.length
+        );
+        bInst.castShadow = true;
+        bInst.receiveShadow = true;
+        buildingMatrices.forEach((m, i) => bInst.setMatrixAt(i, m));
+        scene.add(bInst);
+      }
+
+      if (treeTrunkMatrices.length > 0) {
+        const trunkInst = new THREE.InstancedMesh(
+          new THREE.CylinderGeometry(0.4, 0.55, 3, 6),
+          new THREE.MeshLambertMaterial({ color: 0x78350f }),
+          treeTrunkMatrices.length
+        );
+        treeTrunkMatrices.forEach((m, i) => trunkInst.setMatrixAt(i, m));
+        scene.add(trunkInst);
+
+        const crownInst = new THREE.InstancedMesh(
+          new THREE.DodecahedronGeometry(2.5, 0),
+          new THREE.MeshLambertMaterial({ color: 0x3f624d }),
+          treeCrownMatrices.length
+        );
+        crownInst.castShadow = true;
+        treeCrownMatrices.forEach((m, i) => crownInst.setMatrixAt(i, m));
+        scene.add(crownInst);
+      }
+
+      const halfWorld = worldSpan / 2 + 12;
+      const wallMat = new THREE.MeshLambertMaterial({ color: 0x475569 });
+      [
+        { x: 0, z: -halfWorld, w: worldSpan + 36, d: 8 },
+        { x: 0, z: halfWorld, w: worldSpan + 36, d: 8 },
+        { x: -halfWorld, z: 0, w: 8, d: worldSpan + 36 },
+        { x: halfWorld, z: 0, w: 8, d: worldSpan + 36 }
+      ].forEach((b) => {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(b.w, 6, b.d), wallMat);
+        m.position.set(b.x, 3, b.z);
+        scene.add(m);
+        colliders.push({
+          minX: b.x - b.w / 2,
+          maxX: b.x + b.w / 2,
+          minZ: b.z - b.d / 2,
+          maxZ: b.z + b.d / 2
+        });
+      });
+    }
+
+    function addHighwaySignGantry(x, z) {
+      const g = new THREE.Group();
+      g.position.set(x, 0, z);
+      const pillarMat = new THREE.MeshLambertMaterial({ color: 0x475569 });
+      const p1 = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.26, 8.5, 8), pillarMat);
+      p1.position.set(-15.5, 4.25, 0);
+      g.add(p1);
+      const p2 = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.26, 8.5, 8), pillarMat);
+      p2.position.set(15.5, 4.25, 0);
+      g.add(p2);
+
+      const board = new THREE.Mesh(
+        new THREE.BoxGeometry(12, 2.2, 0.4),
+        new THREE.MeshLambertMaterial({ color: 0x065f46 })
+      );
+      board.position.set(0, 7.6, 0);
+      g.add(board);
+      scene.add(g);
+    }
+
+    function addStreetLight(x, z) {
+      const pole = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.14, 0.18, 6.8, 6),
+        new THREE.MeshLambertMaterial({ color: 0x334155 })
+      );
+      pole.position.set(x, 3.4, z);
+      scene.add(pole);
+
+      const bulbMat = new THREE.MeshBasicMaterial({ color: 0x94a3b8 });
+      const bulb = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.24, 0.4), bulbMat);
+      bulb.position.set(x, 6.8, z);
+      scene.add(bulb);
+      streetLampBulbs.push(bulbMat);
+    }
+
+    function buildServiceStation(cx, cz, kind) {
+      const isFuel = kind === 'FUEL';
+      const canopyColor = isFuel ? 0x059669 : 0xea580c;
+      const ringColor = isFuel ? 0x10b981 : 0xf97316;
+
+      const canopy = new THREE.Mesh(
+        new THREE.BoxGeometry(28, 1.6, 16),
+        new THREE.MeshLambertMaterial({ color: canopyColor })
+      );
+      canopy.position.set(cx, 6.8, cz - 8);
+      canopy.castShadow = true;
+      scene.add(canopy);
+
+      const pillarMat = new THREE.MeshLambertMaterial({ color: 0xe2e8f0 });
+      [-10, 0, 10].forEach((dx) => {
+        const p = new THREE.Mesh(new THREE.BoxGeometry(0.9, 6.6, 0.9), pillarMat);
+        p.position.set(cx + dx, 3.3, cz - 8);
+        scene.add(p);
+      });
+
+      const shopGroup = new THREE.Group();
+      shopGroup.position.set(cx, 0, cz + 14);
+      const shop = new THREE.Mesh(
+        new THREE.BoxGeometry(30, 6, 12),
+        new THREE.MeshLambertMaterial({ color: 0x475569 })
+      );
+      shop.position.y = 3;
+      shopGroup.add(shop);
+
+      // Visible front door on the shop building
+      const doorRing = createVisibleDoor(shopGroup, 0, -6.1, Math.PI, canopyColor, ringColor);
+      scene.add(shopGroup);
+
+      colliders.push({ minX: cx - 15, maxX: cx + 15, minZ: cz + 8, maxZ: cz + 20 });
+
+      interactiveDoors.push({
+        id: `shop_${cx}_${cz}`,
+        label: isFuel ? 'Enter Fuel Mart' : 'Enter Repair Shop',
+        type: kind,
+        x: cx,
+        z: cz + 6.2,
+        returnX: cx,
+        returnZ: cz + 5.2,
+        ringMesh: doorRing
+      });
+
+      const padX = cx;
+      const padZ = cz - 16;
+      const ringGeo = new THREE.RingGeometry(3.6, 4.6, 32);
+      ringGeo.rotateX(-Math.PI / 2);
+      const ringMesh = new THREE.Mesh(
+        ringGeo,
+        new THREE.MeshBasicMaterial({ color: ringColor, side: THREE.DoubleSide, transparent: true, opacity: 0.88 })
+      );
+      ringMesh.position.set(padX, 0.09, padZ);
+      scene.add(ringMesh);
+
+      serviceStations.push({ type: kind, x: padX, z: padZ, ringMesh });
+    }
+
+    function createIntersectionSignals(gx, gz, cx, cz, n, s, e, w, offsetSeed) {
+      const poleMat = new THREE.MeshLambertMaterial({ color: 0x334155 });
+      const boxMat = new THREE.MeshLambertMaterial({ color: 0x1e293b });
+      const rOff = CITY_ROAD_W / 2 + 1.5;
+
+      const corners = [
+        { dx: -rOff, dz: -rOff, rot: 0, axis: 'NS', active: n },
+        { dx: rOff, dz: rOff, rot: Math.PI, axis: 'NS', active: s },
+        { dx: rOff, dz: -rOff, rot: -Math.PI / 2, axis: 'EW', active: e },
+        { dx: -rOff, dz: rOff, rot: Math.PI / 2, axis: 'EW', active: w }
+      ];
+
+      const signalMeshes = { NS: [], EW: [] };
+      corners.forEach((c) => {
+        if (!c.active) return;
+        const group = new THREE.Group();
+        group.position.set(cx + c.dx, 0, cz + c.dz);
+        group.rotation.y = c.rot;
+
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 5.6, 8), poleMat);
+        pole.position.y = 2.8;
+        group.add(pole);
+
+        const housing = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.5, 0.48), boxMat);
+        housing.position.set(0.6, 5.1, 0);
+        group.add(housing);
+
+        const mkBulb = (yOff, hex) => {
+          const mat = new THREE.MeshBasicMaterial({ color: hex });
+          const b = new THREE.Mesh(new THREE.SphereGeometry(0.17, 8, 8), mat);
+          b.position.set(0.6, 5.1 + yOff, 0.24);
+          group.add(b);
+          return mat;
+        };
+
+        signalMeshes[c.axis].push({
+          redMat: mkBulb(0.44, 0x450a0a),
+          amberMat: mkBulb(0, 0x451a03),
+          greenMat: mkBulb(-0.44, 0x052e16)
+        });
+        scene.add(group);
+      });
+
+      trafficLights.push({
+        gx,
+        gz,
+        x: cx,
+        z: cz,
+        timer: offsetSeed * 18,
+        stateNS: 'GREEN',
+        stateEW: 'RED',
+        meshes: signalMeshes
+      });
+    }
+
+    function updateTrafficLights(dt) {
+      trafficLights.forEach((tl) => {
+        tl.timer = (tl.timer + dt) % 18;
+        if (tl.timer < 7) {
+          tl.stateNS = 'GREEN';
+          tl.stateEW = 'RED';
+        } else if (tl.timer < 9) {
+          tl.stateNS = 'AMBER';
+          tl.stateEW = 'RED';
+        } else if (tl.timer < 16) {
+          tl.stateNS = 'RED';
+          tl.stateEW = 'GREEN';
+        } else {
+          tl.stateNS = 'RED';
+          tl.stateEW = 'AMBER';
+        }
+
+        const apply = (list, st) => {
+          list.forEach((b) => {
+            b.redMat.color.setHex(st === 'RED' ? 0xef4444 : 0x3b0d0c);
+            b.amberMat.color.setHex(st === 'AMBER' ? 0xf59e0b : 0x3d2207);
+            b.greenMat.color.setHex(st === 'GREEN' ? 0x22c55e : 0x092b16);
+          });
+        };
+        apply(tl.meshes.NS, tl.stateNS);
+        apply(tl.meshes.EW, tl.stateEW);
+      });
+    }
+
+    buildWorld();
+    buildInteriors();
+    applyWeatherPreset(currentWeatherIdx);
+
+    // =========================================================================
+    // 6. ROAD GRAPH & CATMULL-ROM CURVED GPS ROUTING
+    // =========================================================================
+    const roadNodes = new Map();
+
+    for (let gz = 0; gz < GRID_N; gz++) {
+      for (let gx = 0; gx < GRID_N; gx++) {
+        if (isRoadCell(gx, gz)) {
+          const w = gridToWorld(gx, gz);
+          roadNodes.set(`${gx},${gz}`, {
+            id: `${gx},${gz}`,
+            gx,
+            gz,
+            x: w.x,
+            z: w.z,
+            isHwy: isHighwayCell(gx, gz),
+            neighbors: []
+          });
+        }
+      }
+    }
+
+    roadNodes.forEach((node) => {
+      [
+        { dx: 0, dz: -1 },
+        { dx: 0, dz: 1 },
+        { dx: 1, dz: 0 },
+        { dx: -1, dz: 0 }
+      ].forEach((d) => {
+        const nb = roadNodes.get(`${node.gx + d.dx},${node.gz + d.dz}`);
+        if (nb) node.neighbors.push(nb.id);
+      });
+    });
+
+    function findNearestRoadNode(x, z) {
+      let best = null;
+      let bestDist = Infinity;
+      roadNodes.forEach((node) => {
+        const d = Math.hypot(node.x - x, node.z - z);
+        if (d < bestDist) {
+          bestDist = d;
+          best = node;
+        }
+      });
+      return best;
+    }
+
+    function computeRoadPath(startX, startZ, endX, endZ) {
+      const startNode = findNearestRoadNode(startX, startZ);
+      const endNode = findNearestRoadNode(endX, endZ);
+      if (!startNode || !endNode) return [];
+
+      const dist = new Map();
+      const prev = new Map();
+      const unvisited = new Set(roadNodes.keys());
+      roadNodes.forEach((_, k) => dist.set(k, Infinity));
+      dist.set(startNode.id, 0);
+
+      while (unvisited.size > 0) {
+        let u = null;
+        let minD = Infinity;
+        unvisited.forEach((id) => {
+          const d = dist.get(id);
+          if (d < minD) {
+            minD = d;
+            u = id;
+          }
+        });
+        if (!u || u === endNode.id) break;
+        unvisited.delete(u);
+
+        const uNode = roadNodes.get(u);
+        uNode.neighbors.forEach((vId) => {
+          if (!unvisited.has(vId)) return;
+          const vNode = roadNodes.get(vId);
+          const stepCost = vNode.isHwy ? TILE_SIZE * 0.85 : TILE_SIZE;
+          const alt = dist.get(u) + stepCost;
+          if (alt < dist.get(vId)) {
+            dist.set(vId, alt);
+            prev.set(vId, u);
+          }
+        });
+      }
+
+      const path = [];
+      let curr = endNode.id;
+      while (curr) {
+        const n = roadNodes.get(curr);
+        path.unshift({ x: n.x, z: n.z, gx: n.gx, gz: n.gz });
+        curr = prev.get(curr);
+      }
+      return path;
+    }
+
+    let customWaypoint = null;
+    let gpsRouteLine = null;
+    let currentGpsPath = [];
+
+    function updateGpsVisualLine(points, colorHex = 0x14b8a6) {
+      if (gpsRouteLine) {
+        scene.remove(gpsRouteLine);
+        gpsRouteLine.geometry.dispose();
+        gpsRouteLine = null;
+      }
+      if (!points || points.length < 2) return;
+      const vecs = points.map((p) => new THREE.Vector3(p.x, 0.28, p.z));
+      const curve = new THREE.CatmullRomCurve3(vecs);
+      const smoothPts = curve.getPoints(Math.min(180, vecs.length * 6));
+      const geo = new THREE.BufferGeometry().setFromPoints(smoothPts);
+      gpsRouteLine = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: colorHex }));
+      scene.add(gpsRouteLine);
+    }
+
+    function setCustomWaypoint(wx, wz) {
+      clearCustomWaypoint(false);
+      const nearest = findNearestRoadNode(wx, wz);
+      const tx = nearest ? nearest.x : wx;
+      const tz = nearest ? nearest.z : wz;
+
+      const ringGeo = new THREE.RingGeometry(3.4, 4.4, 32);
+      ringGeo.rotateX(-Math.PI / 2);
+      const ringMesh = new THREE.Mesh(
+        ringGeo,
+        new THREE.MeshBasicMaterial({ color: 0xf43f5e, side: THREE.DoubleSide, transparent: true, opacity: 0.92 })
+      );
+      ringMesh.position.set(tx, 0.1, tz);
+      scene.add(ringMesh);
+
+      const pillarGeo = new THREE.CylinderGeometry(3.4, 3.4, 22, 24, 1, true);
+      const pillarMesh = new THREE.Mesh(
+        pillarGeo,
+        new THREE.MeshBasicMaterial({ color: 0xf43f5e, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false })
+      );
+      pillarMesh.position.set(tx, 11, tz);
+      scene.add(pillarMesh);
+
+      customWaypoint = { x: tx, z: tz, ringMesh, pillarMesh };
+      document.getElementById('btn-clear-waypoint').classList.remove('hidden');
+      sfx.playPin();
+      const g = worldToGrid(tx, tz);
+      showToast(`GPS Pin set: ${getZoneName(g.gx, g.gz)}`, 'border-rose-400');
+    }
+
+    function clearCustomWaypoint(announce = true) {
+      if (customWaypoint) {
+        scene.remove(customWaypoint.ringMesh);
+        scene.remove(customWaypoint.pillarMesh);
+        customWaypoint = null;
+      }
+      currentGpsPath = [];
+      updateGpsVisualLine([]);
+      document.getElementById('btn-clear-waypoint').classList.add('hidden');
+      if (!taxiMission.active && !raceState.active) {
+        document.getElementById('gps-mode-badge').textContent = 'Roam';
+        document.getElementById('gps-instruction').textContent = 'Walk to car or open Map (M)';
+        document.getElementById('gps-dist').textContent = 'Free';
+        document.getElementById('gps-arrow-svg').style.transform = 'rotate(0deg)';
+      }
+      if (announce) showToast('GPS Pin cleared.', 'border-slate-400');
+    }
+
+    // =========================================================================
+    // 7. 20 HIDDEN EXPLORATION EMBLEMS & 6 SPEED RADARS
+    // =========================================================================
+    const explorationEmblems = [];
+    const speedTraps = [];
+
+    function spawnEmblemsAndRadars() {
+      const coords = [
+        { gx: 8, gz: 21, dx: 12, dz: 0 },
+        { gx: 9, gz: 22, dx: 0, dz: -16 },
+        { gx: 7, gz: 22, dx: 0, dz: -16 },
+        { gx: 6, gz: 19, dx: 0, dz: 0 },
+        { gx: 11, gz: 23, dx: 0, dz: 0 },
+        { gx: 6, gz: 4, dx: 12, dz: 0 },
+        { gx: 4, gz: 2, dx: 0, dz: 0 },
+        { gx: 9, gz: 6, dx: 0, dz: 0 },
+        { gx: 19, gz: 21, dx: 12, dz: 0 },
+        { gx: 17, gz: 23, dx: 0, dz: 0 },
+        { gx: 22, gz: 19, dx: 0, dz: 0 },
+        { gx: 20, gz: 4, dx: 12, dz: 0 },
+        { gx: 18, gz: 2, dx: 0, dz: 0 },
+        { gx: 22, gz: 5, dx: 0, dz: 0 },
+        { gx: 2, gz: 13, dx: 12, dz: 0 },
+        { gx: 23, gz: 13, dx: 12, dz: 0 },
+        { gx: 14, gz: 0, dx: 0, dz: 0 },
+        { gx: 14, gz: 25, dx: 0, dz: 0 },
+        { gx: 1, gz: 10, dx: 0, dz: 0 },
+        { gx: 26, gz: 17, dx: 0, dz: 0 }
+      ];
+
+      const gemGeo = new THREE.OctahedronGeometry(1.4, 0);
+      const gemMat = new THREE.MeshLambertMaterial({ color: 0xf59e0b, emissive: 0x78350f });
+      const ringGeo = new THREE.RingGeometry(2.0, 2.6, 24);
+      ringGeo.rotateX(-Math.PI / 2);
+      const ringMat = new THREE.MeshBasicMaterial({ color: 0xfbbf24, side: THREE.DoubleSide, transparent: true, opacity: 0.78 });
+
+      coords.forEach((c, idx) => {
+        const w = gridToWorld(c.gx, c.gz);
+        const x = w.x + c.dx;
+        const z = w.z + c.dz;
+        const collected = playerSave.collectedEmblems.includes(idx);
+
+        const mesh = new THREE.Mesh(gemGeo, gemMat);
+        mesh.position.set(x, 2.2, z);
+        mesh.visible = !collected;
+        scene.add(mesh);
+
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.position.set(x, 0.09, z);
+        ring.visible = !collected;
+        scene.add(ring);
+
+        explorationEmblems.push({ id: idx, x, z, mesh, ring, collected });
+      });
+
+      const radarCoords = [
+        { gx: 10, gz: 0, label: 'North Coastal Hwy' },
+        { gx: 18, gz: 25, label: 'South Bay Express' },
+        { gx: 1, gz: 18, label: 'Westport Curve' },
+        { gx: 26, gz: 8, label: 'Eastgate Straight' },
+        { gx: 10, gz: 15, label: 'Central S-Bend' },
+        { gx: 15, gz: 10, label: 'Midland Bypass' }
+      ];
+
+      radarCoords.forEach((rc, idx) => {
+        const w = gridToWorld(rc.gx, rc.gz);
+        const pole = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.18, 0.22, 5.2, 8),
+          new THREE.MeshLambertMaterial({ color: 0x1e293b })
+        );
+        pole.position.set(w.x + 12, 2.6, w.z + 12);
+        scene.add(pole);
+
+        const box = new THREE.Mesh(
+          new THREE.BoxGeometry(0.8, 0.65, 0.7),
+          new THREE.MeshBasicMaterial({ color: 0x38bdf8 })
+        );
+        box.position.set(w.x + 12, 5.2, w.z + 12);
+        scene.add(box);
+
+        speedTraps.push({ id: idx, x: w.x, z: w.z, label: rc.label, cooldown: 0 });
+      });
+    }
+
+    spawnEmblemsAndRadars();
+
+    // =========================================================================
+    // 8. VEHICLE MESHES, ARTICULATED 3D PLAYER CHARACTER & HOME SPAWN
+    // =========================================================================
+    function createCarMesh(spec, paintHexOverride = null) {
+      const group = new THREE.Group();
+      const bodyColor = paintHexOverride !== null ? paintHexOverride : spec.color;
+      const bodyMat = new THREE.MeshLambertMaterial({ color: bodyColor });
+      const cabinMat = new THREE.MeshLambertMaterial({ color: 0x1e293b });
+      const accentMat = new THREE.MeshLambertMaterial({ color: spec.accent || 0x0f172a });
+
+      const chassis = new THREE.Mesh(
+        new THREE.BoxGeometry(spec.width, spec.height * 0.52, spec.length),
+        bodyMat
+      );
+      chassis.position.y = spec.height * 0.26 + 0.35;
+      chassis.castShadow = true;
+      chassis.receiveShadow = true;
+      group.add(chassis);
+
+      const cabinLen = spec.id === 'pickup' ? spec.length * 0.48 : spec.length * 0.54;
+      const cabinZ = spec.id === 'pickup' ? spec.length * 0.08 : -spec.length * 0.05;
+      const cabin = new THREE.Mesh(
+        new THREE.BoxGeometry(spec.width * 0.86, spec.height * 0.48, cabinLen),
+        cabinMat
+      );
+      cabin.position.set(0, spec.height * 0.72 + 0.35, cabinZ);
+      cabin.castShadow = true;
+      group.add(cabin);
+
+      const stripe = new THREE.Mesh(
+        new THREE.BoxGeometry(spec.width + 0.04, 0.14, spec.length * 0.92),
+        accentMat
+      );
+      stripe.position.set(0, spec.height * 0.36 + 0.35, 0);
+      group.add(stripe);
+
+      const wheelGeo = new THREE.CylinderGeometry(0.38, 0.38, 0.28, 12);
+      wheelGeo.rotateZ(Math.PI / 2);
+      const wheelMat = new THREE.MeshLambertMaterial({ color: 0x0f172a });
+      const wX = spec.width * 0.48;
+      const wZ = spec.length * 0.31;
+      const wheels = [];
+      [
+        [-wX, 0.38, wZ],
+        [wX, 0.38, wZ],
+        [-wX, 0.38, -wZ],
+        [wX, 0.38, -wZ]
+      ].forEach(([wx, wy, wz]) => {
+        const w = new THREE.Mesh(wheelGeo, wheelMat);
+        w.position.set(wx, wy, wz);
+        group.add(w);
+        wheels.push(w);
+      });
+
+      [-spec.width * 0.32, spec.width * 0.32].forEach((hx) => {
+        const hl = new THREE.Mesh(
+          new THREE.BoxGeometry(0.32, 0.16, 0.08),
+          new THREE.MeshBasicMaterial({ color: 0xfef9c3 })
+        );
+        hl.position.set(hx, 0.65, spec.length * 0.5 + 0.01);
+        group.add(hl);
+      });
+
+      const brakeMat = new THREE.MeshBasicMaterial({ color: 0x7f1d1d });
+      [-spec.width * 0.32, spec.width * 0.32].forEach((bx) => {
+        const bl = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.16, 0.08), brakeMat);
+        bl.position.set(bx, 0.68, -spec.length * 0.5 - 0.01);
+        group.add(bl);
+      });
+
+      const indLeftMat = new THREE.MeshBasicMaterial({ color: 0x451a03 });
+      const indRightMat = new THREE.MeshBasicMaterial({ color: 0x451a03 });
+      [spec.length * 0.48, -spec.length * 0.48].forEach((iz) => {
+        const il = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.15, 0.18), indLeftMat);
+        il.position.set(spec.width * 0.48, 0.66, iz);
+        group.add(il);
+
+        const ir = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.15, 0.18), indRightMat);
+        ir.position.set(-spec.width * 0.48, 0.66, iz);
+        group.add(ir);
+      });
+
+      return { group, wheels, brakeMat, indLeftMat, indRightMat };
+    }
+
+    // Articulated 3D Person Mesh
+    function createArticulatedPlayer() {
+      const root = new THREE.Group();
+      const jacketMat = new THREE.MeshLambertMaterial({ color: 0x0d9488 });
+      const pantsMat = new THREE.MeshLambertMaterial({ color: 0x1e293b });
+      const skinMat = new THREE.MeshLambertMaterial({ color: 0xfde68a });
+      const hairMat = new THREE.MeshLambertMaterial({ color: 0x0f172a });
+      const shoeMat = new THREE.MeshLambertMaterial({ color: 0xf8fafc });
+
+      const torso = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.72, 0.3), jacketMat);
+      torso.position.y = 1.12;
+      torso.castShadow = true;
+      root.add(torso);
+
+      const collar = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.14, 0.32), shoeMat);
+      collar.position.y = 1.48;
+      root.add(collar);
+
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.34, 0.34), skinMat);
+      head.position.y = 1.72;
+      head.castShadow = true;
+      root.add(head);
+
+      const hair = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.14, 0.36), hairMat);
+      hair.position.y = 1.88;
+      root.add(hair);
+
+      const visor = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.08, 0.05), hairMat);
+      visor.position.set(0, 1.74, 0.17);
+      root.add(visor);
+
+      const makeLimb = (w, h, d, mat, x, y) => {
+        const pivot = new THREE.Group();
+        pivot.position.set(x, y, 0);
+        const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+        m.position.y = -h / 2;
+        m.castShadow = true;
+        pivot.add(m);
+        root.add(pivot);
+        return pivot;
+      };
+
+      const leftArm = makeLimb(0.16, 0.62, 0.16, jacketMat, 0.37, 1.44);
+      const rightArm = makeLimb(0.16, 0.62, 0.16, jacketMat, -0.37, 1.44);
+      const leftLeg = makeLimb(0.2, 0.72, 0.22, pantsMat, 0.15, 0.76);
+      const rightLeg = makeLimb(0.2, 0.72, 0.22, pantsMat, -0.15, 0.76);
+
+      const lShoe = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.12, 0.3), shoeMat);
+      lShoe.position.set(0, -0.72, 0.04);
+      leftLeg.add(lShoe);
+
+      const rShoe = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.12, 0.3), shoeMat);
+      rShoe.position.set(0, -0.72, 0.04);
+      rightLeg.add(rShoe);
+
+      return { root, leftArm, rightArm, leftLeg, rightLeg };
+    }
+
+    // Build Player Home in Sunport City with visible front door & driveway
+    const sunportCenter = gridToWorld(8, 21);
+    const homeBuildingGroup = new THREE.Group();
+    const homePos = { x: sunportCenter.x - 16, z: sunportCenter.z - 16 };
+    homeBuildingGroup.position.set(homePos.x, 0, homePos.z);
+
+    const homeBody = new THREE.Mesh(
+      new THREE.BoxGeometry(14, 7.5, 12),
+      new THREE.MeshLambertMaterial({ color: 0xe2e8f0 })
+    );
+    homeBody.position.y = 3.75;
+    homeBody.castShadow = true;
+    homeBuildingGroup.add(homeBody);
+
+    const homeRoof = new THREE.Mesh(
+      new THREE.BoxGeometry(15, 1.2, 13),
+      new THREE.MeshLambertMaterial({ color: 0x0f766e })
+    );
+    homeRoof.position.y = 8.0;
+    homeBuildingGroup.add(homeRoof);
+
+    const homeFrontDoorRing = createVisibleDoor(homeBuildingGroup, 0, 6.05, 0, 0x0f766e, 0x14b8a6);
+    scene.add(homeBuildingGroup);
+
+    colliders.push({
+      minX: homePos.x - 7,
+      maxX: homePos.x + 7,
+      minZ: homePos.z - 6,
+      maxZ: homePos.z + 6
+    });
+
+    const homeFrontDoorWorld = {
+      x: homePos.x,
+      z: homePos.z + 7.8
+    };
+
+    interactiveDoors.push({
+      id: 'home_front',
+      label: 'Enter Home',
+      type: 'HOME_ENTER',
+      x: homeFrontDoorWorld.x,
+      z: homeFrontDoorWorld.z,
+      ringMesh: homeFrontDoorRing
+    });
+
+    // Spawn player on foot outside Home front door, with parked car right beside driveway
+    const player = {
+      x: homeFrontDoorWorld.x + 5.5,
+      z: homeFrontDoorWorld.z + 4.5,
+      heading: Math.PI / 2,
+      speed: 0,
+      steerAngle: 0,
+      signal: 'NONE',
+      signalTimer: 0,
+      lastBlinkState: false,
+      multiplier: 1.0,
+      cleanTimer: 0,
+      cruisePayoutTimer: 0,
+      violationCooldown: 0,
+      serviceCooldown: 0,
+      fuel: 100,
+      health: 100,
+      meshObj: null,
+      spec: VEHICLES[0],
+      gear: 1,
+      maxGear: 6,
+      mode: 'WALK',
+      walkHeading: 0,
+      walkPhase: 0,
+      walkingSpeed: 8.5,
+      insideLocation: null, // null | 'HOME' | 'SHOP'
+      activeDoorReturn: null
+    };
+
+    const playerAvatar = createArticulatedPlayer();
+    playerAvatar.root.position.set(homeFrontDoorWorld.x, 0, homeFrontDoorWorld.z + 1.4);
+    scene.add(playerAvatar.root);
+
+    function rebuildPlayerVehicle() {
+      if (player.meshObj) scene.remove(player.meshObj.group);
+      const spec = VEHICLES.find((v) => v.id === playerSave.selectedVehicle) || VEHICLES[0];
+      const paint = PAINT_COLORS.find((p) => p.id === playerSave.paintId) || PAINT_COLORS[0];
+      player.spec = spec;
+      player.meshObj = createCarMesh(spec, paint.hex);
+      player.meshObj.group.position.set(player.x, 0, player.z);
+      player.meshObj.group.rotation.y = player.heading;
+      scene.add(player.meshObj.group);
+    }
+
+    rebuildPlayerVehicle();
+
+    // =========================================================================
+    // 9. LONG-DISTANCE TAXI DRIVER PROFESSION & HIGHWAY CIRCUIT RACE MODE
+    // =========================================================================
+    const taxiMission = {
+      active: false,
+      stage: 'PICKUP', // 'PICKUP' | 'DROPOFF'
+      pickupCity: '',
+      dropoffCity: '',
+      pickupPos: { x: 0, z: 0 },
+      dropoffPos: { x: 0, z: 0 },
+      distanceMeters: 0,
+      baseFare: 0,
+      tipBonus: 120,
+      beaconMesh: null,
+      ringMesh: null
+    };
+
+    function createBeaconMarkers(colorHex) {
+      const ringGeo = new THREE.RingGeometry(3.8, 5.0, 32);
+      ringGeo.rotateX(-Math.PI / 2);
+      const ringMesh = new THREE.Mesh(
+        ringGeo,
+        new THREE.MeshBasicMaterial({ color: colorHex, side: THREE.DoubleSide, transparent: true, opacity: 0.92 })
+      );
+      scene.add(ringMesh);
+
+      const beaconMesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(3.8, 3.8, 24, 24, 1, true),
+        new THREE.MeshBasicMaterial({ color: colorHex, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false })
+      );
+      scene.add(beaconMesh);
+      return { ringMesh, beaconMesh };
+    }
+
+    function clearTaxiMarkers() {
+      if (taxiMission.ringMesh) scene.remove(taxiMission.ringMesh);
+      if (taxiMission.beaconMesh) scene.remove(taxiMission.beaconMesh);
+      taxiMission.ringMesh = null;
+      taxiMission.beaconMesh = null;
+    }
+
+    function toggleTaxiMission() {
+      if (raceState.active) {
+        showToast('Finish or exit Race before starting Taxi!', 'border-amber-400');
+        return;
+      }
+      if (taxiMission.active) {
+        taxiMission.active = false;
+        clearTaxiMarkers();
+        updateGpsVisualLine([]);
+        document.getElementById('gps-mode-badge').textContent = 'Roam';
+        document.getElementById('gps-instruction').textContent = 'Taxi shift ended';
+        document.getElementById('gps-dist').textContent = 'Free';
+        showToast('Taxi shift cancelled.', 'border-slate-400');
+        return;
+      }
+      if (player.mode !== 'CAR') {
+        showToast('Get in your car first to start Taxi shift!', 'border-amber-400');
+        return;
+      }
+
+      clearCustomWaypoint(false);
+      // Choose nearest city for pickup and a distant city for long-distance dropoff
+      const sorted = [...CITY_HUBS].sort((a, b) => {
+        const wa = gridToWorld(a.gx, a.gz);
+        const wb = gridToWorld(b.gx, b.gz);
+        return Math.hypot(wa.x - player.x, wa.z - player.z) - Math.hypot(wb.x - player.x, wb.z - player.z);
+      });
+      const pickupHub = sorted[0];
+      const distantPool = sorted.slice(2);
+      const dropoffHub = distantPool[Math.floor(Math.random() * distantPool.length)];
+
+      const pNode = findNearestRoadNode(gridToWorld(pickupHub.gx, pickupHub.gz).x + 14, gridToWorld(pickupHub.gx, pickupHub.gz).z);
+      const dNode = findNearestRoadNode(gridToWorld(dropoffHub.gx, dropoffHub.gz).x + 14, gridToWorld(dropoffHub.gx, dropoffHub.gz).z);
+
+      taxiMission.active = true;
+      taxiMission.stage = 'PICKUP';
+      taxiMission.pickupCity = pickupHub.name;
+      taxiMission.dropoffCity = dropoffHub.name;
+      taxiMission.pickupPos = { x: pNode.x, z: pNode.z };
+      taxiMission.dropoffPos = { x: dNode.x, z: dNode.z };
+      taxiMission.distanceMeters = Math.round(Math.hypot(dNode.x - pNode.x, dNode.z - pNode.z));
+      taxiMission.baseFare = Math.max(350, Math.round(taxiMission.distanceMeters * 0.48));
+      taxiMission.tipBonus = 150;
+
+      clearTaxiMarkers();
+      const mk = createBeaconMarkers(0x10b981);
+      mk.ringMesh.position.set(pNode.x, 0.1, pNode.z);
+      mk.beaconMesh.position.set(pNode.x, 12, pNode.z);
+      taxiMission.ringMesh = mk.ringMesh;
+      taxiMission.beaconMesh = mk.beaconMesh;
+
+      sfx.playPin();
+      showToast(`Taxi Dispatch: Pick up passenger in ${pickupHub.name}`, 'border-emerald-400');
+    }
+
+    function updateTaxiMission(dt) {
+      if (!taxiMission.active) return;
+      const pulse = 1 + Math.sin(performance.now() * 0.006) * 0.08;
+      if (taxiMission.ringMesh) taxiMission.ringMesh.scale.set(pulse, pulse, 1);
+
+      const target = taxiMission.stage === 'PICKUP' ? taxiMission.pickupPos : taxiMission.dropoffPos;
+      const dist = Math.hypot(player.x - target.x, player.z - target.z);
+
+      currentGpsPath = computeRoadPath(player.x, player.z, target.x, target.z);
+      updateGpsVisualLine([...currentGpsPath, target], taxiMission.stage === 'PICKUP' ? 0x10b981 : 0xf59e0b);
+
+      document.getElementById('gps-mode-badge').textContent = taxiMission.stage === 'PICKUP' ? 'Taxi Pickup' : 'Taxi Fare';
+      document.getElementById('gps-dist').textContent = `${Math.round(dist)}m`;
+
+      let arrowRot = 0;
+      if (currentGpsPath.length >= 2) {
+        const nextWp = currentGpsPath[1];
+        const ang = Math.atan2(nextWp.x - player.x, nextWp.z - player.z);
+        let rel = ang - player.heading;
+        while (rel > Math.PI) rel -= Math.PI * 2;
+        while (rel < -Math.PI) rel += Math.PI * 2;
+        arrowRot = Math.round((-rel * 180) / Math.PI);
+      }
+      document.getElementById('gps-arrow-svg').style.transform = `rotate(${arrowRot}deg)`;
+
+      if (taxiMission.stage === 'PICKUP') {
+        document.getElementById('gps-instruction').textContent = `Pick up at ${taxiMission.pickupCity}`;
+        if (dist < 7.0 && Math.abs(player.speed) < 6.0) {
+          taxiMission.stage = 'DROPOFF';
+          clearTaxiMarkers();
+          const mk = createBeaconMarkers(0xf59e0b);
+          mk.ringMesh.position.set(taxiMission.dropoffPos.x, 0.1, taxiMission.dropoffPos.z);
+          mk.beaconMesh.position.set(taxiMission.dropoffPos.x, 12, taxiMission.dropoffPos.z);
+          taxiMission.ringMesh = mk.ringMesh;
+          taxiMission.beaconMesh = mk.beaconMesh;
+          sfx.playCollectible();
+          showToast(`Passenger aboard! Drive to ${taxiMission.dropoffCity} (Est. ₹${taxiMission.baseFare})`, 'border-amber-400');
+        }
+      } else {
+        document.getElementById('gps-instruction').textContent = `Drop off at ${taxiMission.dropoffCity}`;
+        if (dist < 7.5 && Math.abs(player.speed) < 6.5) {
+          const cruiseMult = 1 + playerSave.upgrades.cruise * 0.2;
+          const totalPay = Math.round((taxiMission.baseFare + taxiMission.tipBonus) * cruiseMult);
+          playerSave.cash += totalPay;
+          playerSave.taxiTripsCompleted = (playerSave.taxiTripsCompleted || 0) + 1;
+          persistSave();
+          sfx.playCollectible();
+          showToast(`Fare Complete! +₹${totalPay} (Tip: ₹${taxiMission.tipBonus})`, 'border-emerald-400');
+          taxiMission.active = false;
+          clearTaxiMarkers();
+          updateGpsVisualLine([]);
+          document.getElementById('gps-mode-badge').textContent = 'Roam';
+          document.getElementById('gps-instruction').textContent = 'Press Taxi (J) for next fare';
+          document.getElementById('gps-dist').textContent = 'Free';
+        }
+      }
+    }
+
+    // Highway Circuit Race Mode
+    const RACE_CHECKPOINTS = [
+      { gx: 10, gz: 25 },
+      { gx: 22, gz: 25 },
+      { gx: 26, gz: 14 },
+      { gx: 24, gz: 1 },
+      { gx: 5, gz: 0 },
+      { gx: 1, gz: 14 }
+    ];
+
+    const raceState = {
+      active: false,
+      cpIndex: 0,
+      timer: 0,
+      rivals: [],
+      ringMesh: null,
+      beaconMesh: null
+    };
+
+    function clearRaceObjects() {
+      if (raceState.ringMesh) scene.remove(raceState.ringMesh);
+      if (raceState.beaconMesh) scene.remove(raceState.beaconMesh);
+      raceState.ringMesh = null;
+      raceState.beaconMesh = null;
+      raceState.rivals.forEach((r) => scene.remove(r.meshObj.group));
+      raceState.rivals = [];
+    }
+
+    function toggleRaceMode() {
+      if (taxiMission.active) {
+        showToast('Finish or cancel Taxi shift before racing!', 'border-amber-400');
+        return;
+      }
+      if (raceState.active) {
+        raceState.active = false;
+        clearRaceObjects();
+        updateGpsVisualLine([]);
+        document.getElementById('gps-mode-badge').textContent = 'Roam';
+        document.getElementById('gps-instruction').textContent = 'Race exited';
+        document.getElementById('gps-dist').textContent = 'Free';
+        showToast('Exited Highway Circuit Race.', 'border-slate-400');
+        return;
+      }
+      if (player.mode !== 'CAR') {
+        showToast('Get in your car first to join the Race!', 'border-amber-400');
+        return;
+      }
+
+      clearCustomWaypoint(false);
+      clearRaceObjects();
+
+      const startW = gridToWorld(6, 25);
+      player.x = startW.x;
+      player.z = startW.z - 4;
+      player.heading = Math.PI / 2;
+      player.speed = 0;
+
+      raceState.active = true;
+      raceState.cpIndex = 0;
+      raceState.timer = 0;
+
+      const firstCp = gridToWorld(RACE_CHECKPOINTS[0].gx, RACE_CHECKPOINTS[0].gz);
+      const mk = createBeaconMarkers(0x38bdf8);
+      mk.ringMesh.position.set(firstCp.x, 0.1, firstCp.z);
+      mk.beaconMesh.position.set(firstCp.x, 12, firstCp.z);
+      raceState.ringMesh = mk.ringMesh;
+      raceState.beaconMesh = mk.beaconMesh;
+
+      // Spawn 3 AI Race Rivals
+      const rivalColors = [0xef4444, 0xf59e0b, 0x8b5cf6];
+      for (let i = 0; i < 3; i++) {
+        const spec = { width: 1.9, height: 1.25, length: 4.4, color: rivalColors[i], accent: 0x0f172a };
+        const meshObj = createCarMesh(spec);
+        const rx = startW.x - 6 - i * 6;
+        const rz = startW.z + (i % 2 === 0 ? 4 : -4);
+        meshObj.group.position.set(rx, 0, rz);
+        meshObj.group.rotation.y = Math.PI / 2;
+        scene.add(meshObj.group);
+        raceState.rivals.push({
+          x: rx,
+          z: rz,
+          heading: Math.PI / 2,
+          speed: 0,
+          maxSpeed: 37 + i * 2.2,
+          cpIndex: 0,
+          meshObj
+        });
+      }
+
+      sfx.playPin();
+      showToast('Highway Circuit Race Started! Hit all 6 Checkpoints!', 'border-sky-400');
+    }
+
+    function updateRaceMode(dt) {
+      if (!raceState.active) return;
+      raceState.timer += dt;
+
+      const cpGrid = RACE_CHECKPOINTS[raceState.cpIndex];
+      const cpW = gridToWorld(cpGrid.gx, cpGrid.gz);
+      const dist = Math.hypot(player.x - cpW.x, player.z - cpW.z);
+
+      // Update AI rivals
+      raceState.rivals.forEach((rv) => {
+        const rCp = gridToWorld(RACE_CHECKPOINTS[rv.cpIndex].gx, RACE_CHECKPOINTS[rv.cpIndex].gz);
+        const dx = rCp.x - rv.x;
+        const dz = rCp.z - rv.z;
+        const d = Math.hypot(dx, dz);
+        if (d < 16) {
+          rv.cpIndex = (rv.cpIndex + 1) % RACE_CHECKPOINTS.length;
+        }
+        const targetAng = Math.atan2(dx, dz);
+        let diff = targetAng - rv.heading;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        rv.heading += Math.max(-2.8 * dt, Math.min(2.8 * dt, diff));
+        rv.speed += (rv.maxSpeed - rv.speed) * Math.min(1, dt * 2.2);
+        rv.x += Math.sin(rv.heading) * rv.speed * dt;
+        rv.z += Math.cos(rv.heading) * rv.speed * dt;
+        rv.meshObj.group.position.set(rv.x, 0, rv.z);
+        rv.meshObj.group.rotation.y = rv.heading;
+      });
+
+      // Compute player rank
+      let rank = 1;
+      raceState.rivals.forEach((rv) => {
+        if (rv.cpIndex > raceState.cpIndex) rank++;
+      });
+
+      document.getElementById('gps-mode-badge').textContent = `Pos ${rank}/4`;
+      document.getElementById('gps-dist').textContent = `${raceState.timer.toFixed(1)}s`;
+      document.getElementById('gps-instruction').textContent = `CP ${raceState.cpIndex + 1}/${RACE_CHECKPOINTS.length} (${Math.round(dist)}m)`;
+
+      const ang = Math.atan2(cpW.x - player.x, cpW.z - player.z);
+      let rel = ang - player.heading;
+      while (rel > Math.PI) rel -= Math.PI * 2;
+      while (rel < -Math.PI) rel += Math.PI * 2;
+      document.getElementById('gps-arrow-svg').style.transform = `rotate(${Math.round((-rel * 180) / Math.PI)}deg)`;
+
+      if (dist < 16) {
+        raceState.cpIndex++;
+        sfx.playPin();
+        if (raceState.cpIndex >= RACE_CHECKPOINTS.length) {
+          const prizes = [1200, 750, 450, 250];
+          const reward = prizes[rank - 1] || 250;
+          playerSave.cash += reward;
+          persistSave();
+          sfx.playCollectible();
+          showToast(`Race Finished #${rank} in ${raceState.timer.toFixed(1)}s! +₹${reward}`, 'border-sky-400');
+          raceState.active = false;
+          clearRaceObjects();
+          document.getElementById('gps-mode-badge').textContent = 'Roam';
+          document.getElementById('gps-instruction').textContent = 'Race complete! Press B to race again';
+          document.getElementById('gps-dist').textContent = 'Free';
+          return;
+        }
+        const nextCp = gridToWorld(RACE_CHECKPOINTS[raceState.cpIndex].gx, RACE_CHECKPOINTS[raceState.cpIndex].gz);
+        raceState.ringMesh.position.set(nextCp.x, 0.1, nextCp.z);
+        raceState.beaconMesh.position.set(nextCp.x, 12, nextCp.z);
+      }
+    }
+
+    // =========================================================================
+    // 10. AI TRAFFIC (48 CARS) & URBAN PEDESTRIANS (56 NPCS)
+    // =========================================================================
+    const aiCars = [];
+    const AI_COLORS = [0x64748b, 0x475569, 0xd97706, 0x0f766e, 0xe2e8f0, 0x7c2d12, 0x334155];
+
+    function spawnAITraffic(count = 48) {
+      const allRoadList = Array.from(roadNodes.values());
+      for (let i = 0; i < count; i++) {
+        const startNode = allRoadList[(i * 11) % allRoadList.length];
+        if (!startNode || startNode.neighbors.length === 0) continue;
+        const nextId = startNode.neighbors[i % startNode.neighbors.length];
+        const nextNode = roadNodes.get(nextId);
+        if (!nextNode) continue;
+
+        const isHwy = startNode.isHwy && nextNode.isHwy;
+        const laneOff = isHwy ? HWY_LANE_OFF : CITY_LANE_OFF;
+        const dirX = Math.sign(nextNode.x - startNode.x);
+        const dirZ = Math.sign(nextNode.z - startNode.z);
+        const leftX = dirZ * laneOff;
+        const leftZ = -dirX * laneOff;
+
+        const spec = {
+          id: 'ai',
+          width: 1.85,
+          height: 1.35,
+          length: 4.2,
+          color: AI_COLORS[i % AI_COLORS.length],
+          accent: 0x1e293b
+        };
+        const meshObj = createCarMesh(spec);
+        const spd = isHwy ? 24 + (i % 4) * 2.5 : 13 + (i % 3) * 1.5;
+
+        const ai = {
+          x: startNode.x + leftX,
+          z: startNode.z + leftZ,
+          heading: Math.atan2(dirX, dirZ),
+          speed: spd,
+          maxSpeed: spd,
+          currNode: startNode,
+          targetNode: nextNode,
+          turnSignal: 'NONE',
+          meshObj
+        };
+
+        meshObj.group.position.set(ai.x, 0, ai.z);
+        meshObj.group.rotation.y = ai.heading;
+        scene.add(meshObj.group);
+        aiCars.push(ai);
+      }
+    }
+
+    spawnAITraffic(48);
+
+    function updateAITraffic(dt) {
+      const blinkOn = Math.floor(performance.now() / 280) % 2 === 0;
+      const cullRadiusSq = 360 * 360;
+      const refX = player.mode === 'WALK' ? playerAvatar.root.position.x : player.x;
+      const refZ = player.mode === 'WALK' ? playerAvatar.root.position.z : player.z;
+
+      aiCars.forEach((ai) => {
+        const dxP = ai.x - refX;
+        const dzP = ai.z - refZ;
+        const nearPlayer = dxP * dxP + dzP * dzP < cullRadiusSq;
+        ai.meshObj.group.visible = nearPlayer;
+        if (!nearPlayer) return;
+
+        const isHwy = ai.currNode.isHwy && ai.targetNode.isHwy;
+        const laneOff = isHwy ? HWY_LANE_OFF : CITY_LANE_OFF;
+        const dirX = Math.sign(ai.targetNode.x - ai.currNode.x);
+        const dirZ = Math.sign(ai.targetNode.z - ai.currNode.z);
+        const wpX = ai.targetNode.x + dirZ * laneOff;
+        const wpZ = ai.targetNode.z - dirX * laneOff;
+
+        const toWpX = wpX - ai.x;
+        const toWpZ = wpZ - ai.z;
+        const distToWp = Math.hypot(toWpX, toWpZ);
+
+        if (distToWp < 6.5) {
+          const prevId = ai.currNode.id;
+          ai.currNode = ai.targetNode;
+          const options = ai.currNode.neighbors.filter((id) => id !== prevId);
+          const chosenId = options.length > 0 ? options[Math.floor(Math.random() * options.length)] : prevId;
+          ai.targetNode = roadNodes.get(chosenId);
+
+          const nextDirX = Math.sign(ai.targetNode.x - ai.currNode.x);
+          const nextDirZ = Math.sign(ai.targetNode.z - ai.currNode.z);
+          const cross = dirX * nextDirZ - dirZ * nextDirX;
+          ai.turnSignal = cross < -0.5 ? 'LEFT' : cross > 0.5 ? 'RIGHT' : 'NONE';
+        }
+
+        const desiredHeading = Math.atan2(toWpX, toWpZ);
+        let diff = desiredHeading - ai.heading;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        ai.heading += Math.max(-2.6 * dt, Math.min(2.6 * dt, diff));
+
+        let mustStop = false;
+        const tl = trafficLights.find((t) => t.gx === ai.targetNode.gx && t.gz === ai.targetNode.gz);
+        if (tl && distToWp > 10 && distToWp < 26) {
+          const movingNS = Math.abs(dirZ) > 0;
+          const lightState = movingNS ? tl.stateNS : tl.stateEW;
+          if (lightState !== 'GREEN') mustStop = true;
+        }
+
+        const fwdX = Math.sin(ai.heading);
+        const fwdZ = Math.cos(ai.heading);
+        const checkAhead = (ox, oz, minDist) => {
+          const dx = ox - ai.x;
+          const dz = oz - ai.z;
+          const d = Math.hypot(dx, dz);
+          if (d < minDist && d > 0.1 && (dx * fwdX + dz * fwdZ) / d > 0.85) return true;
+          return false;
+        };
+
+        if (checkAhead(refX, refZ, 14)) mustStop = true;
+        for (let j = 0; j < aiCars.length; j++) {
+          if (aiCars[j] !== ai && checkAhead(aiCars[j].x, aiCars[j].z, 12)) {
+            mustStop = true;
+            break;
+          }
+        }
+
+        const hwyTarget = ai.currNode.isHwy && ai.targetNode.isHwy ? Math.max(ai.maxSpeed, 25) : Math.min(ai.maxSpeed, 14);
+        const targetSpd = mustStop ? 0 : hwyTarget;
+        ai.speed += (targetSpd - ai.speed) * Math.min(1, dt * (mustStop ? 6 : 2.5));
+
+        ai.meshObj.brakeMat.color.setHex(mustStop ? 0xef4444 : 0x7f1d1d);
+        ai.meshObj.indLeftMat.color.setHex(ai.turnSignal === 'LEFT' && blinkOn ? 0xfbbf24 : 0x451a03);
+        ai.meshObj.indRightMat.color.setHex(ai.turnSignal === 'RIGHT' && blinkOn ? 0xfbbf24 : 0x451a03);
+
+        ai.x += Math.sin(ai.heading) * ai.speed * dt;
+        ai.z += Math.cos(ai.heading) * ai.speed * dt;
+        ai.meshObj.group.position.set(ai.x, 0, ai.z);
+        ai.meshObj.group.rotation.y = ai.heading;
+        ai.meshObj.wheels.forEach((w) => (w.rotation.x += ai.speed * dt * 2.2));
+      });
+    }
+
+    const pedestrians = [];
+    const PED_SHIRTS = [0x0d9488, 0xd97706, 0x3b82f6, 0xe11d48, 0x475569, 0xf8fafc];
+
+    function spawnPedestrians(count = 56) {
+      const cityBlocks = [];
+      for (let gz = 0; gz < GRID_N; gz++) {
+        for (let gx = 0; gx < GRID_N; gx++) {
+          if (GRID[gz][gx] === 'B' || GRID[gz][gx] === 'P') {
+            cityBlocks.push(gridToWorld(gx, gz));
+          }
+        }
+      }
+
+      for (let i = 0; i < count; i++) {
+        const blk = cityBlocks[i % cityBlocks.length];
+        const group = new THREE.Group();
+
+        const torso = new THREE.Mesh(
+          new THREE.BoxGeometry(0.45, 0.75, 0.25),
+          new THREE.MeshLambertMaterial({ color: PED_SHIRTS[i % PED_SHIRTS.length] })
+        );
+        torso.position.y = 0.98;
+        group.add(torso);
+
+        const head = new THREE.Mesh(
+          new THREE.BoxGeometry(0.28, 0.28, 0.28),
+          new THREE.MeshLambertMaterial({ color: 0xfde68a })
+        );
+        head.position.y = 1.5;
+        group.add(head);
+
+        const r = TILE_SIZE * 0.42;
+        const corner = i % 4;
+        const corners = [
+          { x: blk.x - r, z: blk.z - r },
+          { x: blk.x + r, z: blk.z - r },
+          { x: blk.x + r, z: blk.z + r },
+          { x: blk.x - r, z: blk.z + r }
+        ];
+
+        const ped = {
+          group,
+          corners,
+          targetIdx: (corner + 1) % 4,
+          x: corners[corner].x,
+          z: corners[corner].z,
+          speed: 1.5 + (i % 3) * 0.25,
+          phase: i * 1.1
+        };
+        group.position.set(ped.x, 0, ped.z);
+        scene.add(group);
+        pedestrians.push(ped);
+      }
+    }
+
+    spawnPedestrians(56);
+
+    function updatePedestrians(dt) {
+      const cullSq = 210 * 210;
+      const refX = player.mode === 'WALK' ? playerAvatar.root.position.x : player.x;
+      const refZ = player.mode === 'WALK' ? playerAvatar.root.position.z : player.z;
+
+      pedestrians.forEach((p) => {
+        const dxP = p.x - refX;
+        const dzP = p.z - refZ;
+        const near = dxP * dxP + dzP * dzP < cullSq;
+        p.group.visible = near;
+        if (!near) return;
+
+        const target = p.corners[p.targetIdx];
+        const dx = target.x - p.x;
+        const dz = target.z - p.z;
+        const dist = Math.hypot(dx, dz);
+
+        if (dist < 0.9) {
+          p.targetIdx = (p.targetIdx + 1) % 4;
+        } else {
+          p.x += (dx / dist) * p.speed * dt;
+          p.z += (dz / dist) * p.speed * dt;
+          p.group.rotation.y = Math.atan2(dx, dz);
+        }
+
+        p.phase += dt * 8;
+        p.group.position.set(p.x, Math.abs(Math.sin(p.phase)) * 0.08, p.z);
+      });
+    }
+
+    // =========================================================================
+    // 11. WALK / CAR TOGGLE, ENTER/EXIT DOORS & CONTROLS
+    // =========================================================================
+    const input = { up: false, down: false, left: false, right: false, handbrake: false };
+    let cameraMode = 0;
+    const CAM_NAMES = ['Chase', 'Hood', 'Top'];
+
+    function updateVehicleToggleBtn() {
+      const btn = document.getElementById('btn-vehicle-toggle');
+      if (player.mode === 'CAR') {
+        btn.textContent = '🚶 Exit Car';
+        btn.className = 'hud-card px-3 py-1.5 rounded-xl text-xs font-extrabold text-amber-300 border border-amber-500/50 cursor-pointer shadow-md';
+      } else {
+        btn.textContent = '🚗 Get In Car';
+        btn.className = 'hud-card px-3 py-1.5 rounded-xl text-xs font-extrabold text-emerald-300 border border-emerald-500/50 cursor-pointer shadow-md';
+      }
+    }
+
+    function toggleWalkCarMode() {
+      if (player.insideLocation) {
+        showToast('Exit the building door first!', 'border-amber-400');
+        return;
+      }
+      if (player.mode === 'CAR') {
+        if (Math.abs(player.speed) > 2.5) {
+          showToast('Slow down before exiting the car!', 'border-rose-400');
+          return;
+        }
+        player.speed = 0;
+        const leftX = Math.cos(player.heading) * 2.2;
+        const leftZ = -Math.sin(player.heading) * 2.2;
+        playerAvatar.root.position.set(player.x + leftX, 0, player.z + leftZ);
+        player.walkHeading = player.heading;
+        playerAvatar.root.rotation.y = player.walkHeading;
+        playerAvatar.root.visible = true;
+        player.mode = 'WALK';
+        updateVehicleToggleBtn();
+        showToast('Exited car. Walk around or enter doors.', 'border-teal-400');
+      } else {
+        const d = Math.hypot(playerAvatar.root.position.x - player.x, playerAvatar.root.position.z - player.z);
+        if (d > 6.5) {
+          showToast('Walk closer to your car to get in!', 'border-amber-400');
+          return;
+        }
+        playerAvatar.root.visible = false;
+        player.mode = 'CAR';
+        updateVehicleToggleBtn();
+        showToast(`Driving ${player.spec.name}`, 'border-emerald-400');
+      }
+    }
+
+    let nearbyDoor = null;
+    function triggerDoorInteraction() {
+      if (!nearbyDoor || player.mode !== 'WALK') return;
+      sfx.playService();
+
+      if (nearbyDoor.type === 'HOME_ENTER') {
+        player.insideLocation = 'HOME';
+        player.health = 100;
+        playerAvatar.root.position.set(HOME_INTERIOR_POS.x, 0, HOME_INTERIOR_POS.z + 5.2);
+        player.walkHeading = Math.PI;
+        showToast('Entered Home • Health Restored to 100%!', 'border-teal-400');
+      } else if (nearbyDoor.type === 'HOME_EXIT') {
+        player.insideLocation = null;
+        playerAvatar.root.position.set(homeFrontDoorWorld.x, 0, homeFrontDoorWorld.z + 1.4);
+        player.walkHeading = 0;
+        showToast('Exited Home to Sunport Driveway.', 'border-teal-400');
+      } else if (nearbyDoor.type === 'FUEL' || nearbyDoor.type === 'REPAIR') {
+        player.insideLocation = 'SHOP';
+        player.activeDoorReturn = { x: nearbyDoor.returnX, z: nearbyDoor.returnZ };
+        if (nearbyDoor.type === 'FUEL') player.fuel = 100;
+        if (nearbyDoor.type === 'REPAIR') player.health = 100;
+        playerAvatar.root.position.set(SHOP_INTERIOR_POS.x, 0, SHOP_INTERIOR_POS.z + 4.4);
+        player.walkHeading = Math.PI;
+        showToast(
+          nearbyDoor.type === 'FUEL' ? 'Entered Fuel Mart • Fuel 100%!' : 'Entered Repair Shop • Health 100%!',
+          'border-emerald-400'
+        );
+      } else if (nearbyDoor.type === 'SHOP_EXIT') {
+        player.insideLocation = null;
+        const ret = player.activeDoorReturn || homeFrontDoorWorld;
+        playerAvatar.root.position.set(ret.x, 0, ret.z);
+        player.walkHeading = Math.PI;
+        showToast('Exited Shop.', 'border-slate-300');
+      }
+    }
+
+    function cycleCamera() {
+      cameraMode = (cameraMode + 1) % 3;
+      document.getElementById('cam-label').textContent = CAM_NAMES[cameraMode];
+    }
+
+    function toggleSignal(dir) {
+      sfx.init();
+      player.signal = player.signal === dir ? 'NONE' : dir;
+      player.signalTimer = 0;
+    }
+
+    function resetPlayerOnRoad() {
+      if (player.insideLocation) {
+        player.insideLocation = null;
+        playerAvatar.root.position.set(homeFrontDoorWorld.x, 0, homeFrontDoorWorld.z + 1.4);
+      }
+      const nearest = findNearestRoadNode(player.x, player.z);
+      if (nearest) {
+        player.x = nearest.x;
+        player.z = nearest.z;
+        player.speed = 0;
+        player.steerAngle = 0;
+        player.meshObj.group.position.set(player.x, 0, player.z);
+        if (player.mode === 'WALK') {
+          playerAvatar.root.position.set(nearest.x + 2, 0, nearest.z);
+        }
+        showToast('Aligned to nearest road.', 'border-sky-400');
+      }
+    }
+
+    function toggleFullMap() {
+      const modal = document.getElementById('fullmap-modal');
+      const hidden = modal.classList.contains('hidden');
+      if (hidden) {
+        renderFullCityMap();
+        modal.classList.remove('hidden');
+      } else {
+        modal.classList.add('hidden');
+      }
+    }
+
+    function toggleGarageModal() {
+      const modal = document.getElementById('garage-modal');
+      const hidden = modal.classList.contains('hidden');
+      if (hidden) {
+        renderGarage();
+        modal.classList.remove('hidden');
+      } else {
+        modal.classList.add('hidden');
+      }
+    }
+
+    function toggleChillMode() {
+      playerSave.chillMode = !playerSave.chillMode;
+      if (playerSave.chillMode) {
+        player.fuel = 100;
+        player.health = 100;
+      }
+      persistSave();
+      updateChillButtonUI();
+      showToast(
+        playerSave.chillMode ? 'Chill Mode ON: Infinite Fuel & No Damage' : 'Sim Mode ON: Fuel & Wear Active',
+        'border-teal-400'
+      );
+    }
+
+    function updateChillButtonUI() {
+      const lbl = document.getElementById('chill-status-label');
+      if (!lbl) return;
+      lbl.textContent = playerSave.chillMode ? 'ON' : 'OFF';
+      lbl.className = playerSave.chillMode ? 'font-bold text-emerald-300' : 'font-bold text-slate-400';
+    }
+
+    updateChillButtonUI();
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.repeat) return;
+      sfx.init();
+      const k = e.key.toLowerCase();
+      if (k === 'w' || e.key === 'ArrowUp') input.up = true;
+      if (k === 's' || e.key === 'ArrowDown') input.down = true;
+      if (k === 'a' || e.key === 'ArrowLeft') input.left = true;
+      if (k === 'd' || e.key === 'ArrowRight') input.right = true;
+      if (e.code === 'Space') {
+        input.handbrake = true;
+        e.preventDefault();
+      }
+      if (k === 'q') toggleSignal('LEFT');
+      if (k === 'e') toggleSignal('RIGHT');
+      if (k === 'h') sfx.playHorn();
+      if (k === 'c') cycleCamera();
+      if (k === 'm') toggleFullMap();
+      if (k === 'g') toggleGarageModal();
+      if (k === 'r') resetPlayerOnRoad();
+      if (k === 'v') toggleWalkCarMode();
+      if (k === 't') triggerDoorInteraction();
+      if (k === 'j') toggleTaxiMission();
+      if (k === 'b') toggleRaceMode();
+      if (k === 'f') toggleFullscreen();
+      if (k === 'z') {
+        player.gear = Math.max(1, player.gear - 1);
+        showToast(`Gear G${player.gear}`, 'border-teal-400');
+      }
+      if (k === 'x') {
+        player.gear = Math.min(player.maxGear, player.gear + 1);
+        showToast(`Gear G${player.gear}`, 'border-teal-400');
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      const k = e.key.toLowerCase();
+      if (k === 'w' || e.key === 'ArrowUp') input.up = false;
+      if (k === 's' || e.key === 'ArrowDown') input.down = false;
+      if (k === 'a' || e.key === 'ArrowLeft') input.left = false;
+      if (k === 'd' || e.key === 'ArrowRight') input.right = false;
+      if (e.code === 'Space') input.handbrake = false;
+    });
+
+    function bindHoldButton(id, prop) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const down = (e) => {
+        e.preventDefault();
+        sfx.init();
+        input[prop] = true;
+        el.classList.add('active');
+      };
+      const up = (e) => {
+        e.preventDefault();
+        input[prop] = false;
+        el.classList.remove('active');
+      };
+      el.addEventListener('pointerdown', down);
+      el.addEventListener('pointerup', up);
+      el.addEventListener('pointerleave', up);
+      el.addEventListener('pointercancel', up);
+    }
+
+    bindHoldButton('touch-left', 'left');
+    bindHoldButton('touch-right', 'right');
+    bindHoldButton('touch-gas', 'up');
+    bindHoldButton('touch-brake', 'down');
+    bindHoldButton('touch-handbrake', 'handbrake');
+
+    document.getElementById('gear-down').addEventListener('click', () => {
+      player.gear = Math.max(1, player.gear - 1);
+      showToast(`Gear G${player.gear}`, 'border-teal-400');
+    });
+    document.getElementById('gear-up').addEventListener('click', () => {
+      player.gear = Math.min(player.maxGear, player.gear + 1);
+      showToast(`Gear G${player.gear}`, 'border-teal-400');
+    });
+
+    document.getElementById('btn-vehicle-toggle').addEventListener('click', toggleWalkCarMode);
+    document.getElementById('btn-door-action').addEventListener('click', triggerDoorInteraction);
+    document.getElementById('btn-ind-left').addEventListener('click', () => toggleSignal('LEFT'));
+    document.getElementById('btn-ind-right').addEventListener('click', () => toggleSignal('RIGHT'));
+    document.getElementById('btn-taxi').addEventListener('click', toggleTaxiMission);
+    document.getElementById('btn-race').addEventListener('click', toggleRaceMode);
+    document.getElementById('btn-map').addEventListener('click', toggleFullMap);
+    document.getElementById('btn-garage').addEventListener('click', toggleGarageModal);
+
+    // Overflow '⋯' Menu Toggle
+    const moreDrawer = document.getElementById('more-menu-drawer');
+    document.getElementById('btn-more-menu').addEventListener('click', (e) => {
+      e.stopPropagation();
+      moreDrawer.classList.toggle('hidden');
+    });
+    window.addEventListener('click', (e) => {
+      if (!moreDrawer.contains(e.target) && e.target.id !== 'btn-more-menu') {
+        moreDrawer.classList.add('hidden');
+      }
+    });
+
+    document.getElementById('btn-cam').addEventListener('click', cycleCamera);
+    document.getElementById('btn-weather').addEventListener('click', () => {
+      applyWeatherPreset(currentWeatherIdx + 1);
+      showToast(`Weather: ${WEATHER_MODES[currentWeatherIdx].label}`, 'border-amber-400');
+    });
+    document.getElementById('btn-audio').addEventListener('click', () => sfx.toggle());
+    document.getElementById('btn-horn-menu').addEventListener('click', () => sfx.playHorn());
+    document.getElementById('btn-chill-toggle').addEventListener('click', toggleChillMode);
+    document.getElementById('btn-reset').addEventListener('click', resetPlayerOnRoad);
+    document.getElementById('btn-fullscreen').addEventListener('click', toggleFullscreen);
+    document.getElementById('btn-welcome-fs').addEventListener('click', toggleFullscreen);
+
+    document.getElementById('close-fullmap').addEventListener('click', toggleFullMap);
+    document.getElementById('btn-clear-waypoint').addEventListener('click', () => clearCustomWaypoint(true));
+    document.getElementById('modal-clear-pin').addEventListener('click', () => {
+      clearCustomWaypoint(true);
+      renderFullCityMap();
+    });
+    document.getElementById('close-garage').addEventListener('click', toggleGarageModal);
+
+    document.getElementById('fullmap-canvas').addEventListener('click', (e) => {
+      const fm = e.currentTarget;
+      const rect = fm.getBoundingClientRect();
+      const cx = (e.clientX - rect.left) * (fm.width / rect.width);
+      const cy = (e.clientY - rect.top) * (fm.height / rect.height);
+
+      const pad = 22;
+      const mapSpan = fm.width - pad * 2;
+      const halfWorld = (GRID_N * TILE_SIZE) / 2;
+
+      const wx = ((cx - pad) / mapSpan) * (GRID_N * TILE_SIZE) - halfWorld;
+      const wz = ((cy - pad) / mapSpan) * (GRID_N * TILE_SIZE) - halfWorld;
+
+      if (taxiMission.active || raceState.active) {
+        showToast('Finish Taxi/Race before setting a free-roam pin.', 'border-amber-400');
+        return;
+      }
+      setCustomWaypoint(wx, wz);
+      renderFullCityMap();
+    });
+
+    // =========================================================================
+    // 12. TOASTS, WELCOME MODAL & GARAGE RENDERER
+    // =========================================================================
+    let toastTimeout = null;
+    function showToast(msg, borderClass = 'border-teal-400') {
+      const el = document.getElementById('hud-toast');
+      el.textContent = msg;
+      el.className = `hud-card rounded-lg px-2.5 py-1 text-[11px] font-medium text-slate-100 border-l-4 ${borderClass} max-w-[230px] sm:max-w-xs`;
+      el.classList.remove('hidden');
+      clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => el.classList.add('hidden'), 3400);
+    }
+
+    document.getElementById('btn-start-game').addEventListener('click', () => {
+      sfx.init();
+      playerSave.tutorialDone = true;
+      persistSave();
+      document.getElementById('welcome-modal').classList.add('hidden');
+    });
+
+    function renderGarage() {
+      document.getElementById('garage-cash').textContent = `₹${playerSave.cash}`;
+
+      const activePaint = PAINT_COLORS.find((p) => p.id === playerSave.paintId) || PAINT_COLORS[0];
+      document.getElementById('paint-name-label').textContent = activePaint.name;
+      const swatchWrap = document.getElementById('paint-swatches');
+      swatchWrap.innerHTML = '';
+      PAINT_COLORS.forEach((p) => {
+        const isSel = p.id === playerSave.paintId;
+        const btn = document.createElement('button');
+        btn.title = p.name;
+        btn.className = `w-9 h-9 rounded-full border-2 transition cursor-pointer ${
+          isSel ? 'border-teal-400 scale-110 ring-2 ring-teal-400/40' : 'border-slate-600 hover:scale-105'
+        }`;
+        btn.style.backgroundColor = p.css;
+        btn.addEventListener('click', () => {
+          playerSave.paintId = p.id;
+          persistSave();
+          sfx.playService();
+          rebuildPlayerVehicle();
+          renderGarage();
+        });
+        swatchWrap.appendChild(btn);
+      });
+
+      const upgContainer = document.getElementById('upgrades-list');
+      upgContainer.innerHTML = '';
+      UPGRADE_DEFS.forEach((u) => {
+        const lvl = playerSave.upgrades[u.id] || 0;
+        const isMax = lvl >= u.maxLevel;
+        const cost = u.baseCost * (lvl + 1);
+        const canAfford = playerSave.cash >= cost && !isMax;
+
+        const card = document.createElement('div');
+        card.className = 'bg-slate-800/90 border border-slate-700 rounded-xl p-3 flex flex-col justify-between';
+        card.innerHTML = `
+          <div>
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-white">${u.name}</span>
+              <span class="mono text-[11px] text-teal-400 font-bold">Lv ${lvl}/${u.maxLevel}</span>
+            </div>
+            <p class="text-[11px] text-slate-400 mt-1">${u.desc}</p>
+          </div>
+          <button ${!canAfford ? 'disabled' : ''} class="mt-3 w-full py-1.5 px-2.5 rounded-lg text-xs font-bold transition ${
+            isMax
+              ? 'bg-slate-700 text-slate-400 cursor-default'
+              : canAfford
+              ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 cursor-pointer'
+              : 'bg-slate-700/60 text-slate-500 cursor-not-allowed'
+          }">
+            ${isMax ? 'Maxed Out' : `Upgrade • ₹${cost}`}
+          </button>
+        `;
+        const btn = card.querySelector('button');
+        if (canAfford) {
+          btn.addEventListener('click', () => {
+            playerSave.cash -= cost;
+            playerSave.upgrades[u.id] = lvl + 1;
+            persistSave();
+            sfx.playService();
+            renderGarage();
+          });
+        }
+        upgContainer.appendChild(card);
+      });
+
+      const vehContainer = document.getElementById('vehicles-list');
+      vehContainer.innerHTML = '';
+      VEHICLES.forEach((v) => {
+        const owned = playerSave.ownedVehicles.includes(v.id);
+        const selected = playerSave.selectedVehicle === v.id;
+        const canAfford = playerSave.cash >= v.price;
+
+        const card = document.createElement('div');
+        card.className = `bg-slate-800/90 border ${
+          selected ? 'border-teal-400' : 'border-slate-700'
+        } rounded-xl p-3.5 flex flex-col justify-between`;
+        card.innerHTML = `
+          <div>
+            <div class="flex items-center justify-between">
+              <span class="text-sm font-bold text-white">${v.name}</span>
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded ${
+                selected ? 'bg-teal-500/20 text-teal-300' : 'bg-slate-700 text-slate-300'
+              }">${selected ? 'Driving' : owned ? 'Owned' : `₹${v.price}`}</span>
+            </div>
+            <div class="text-[11px] text-amber-300 font-medium mt-0.5">${v.role}</div>
+            <div class="grid grid-cols-2 gap-2 mt-2 text-[11px] text-slate-400">
+              <div>Top Speed: <span class="mono text-slate-200">${Math.round(v.topSpeed * 3.6)} km/h</span></div>
+              <div>Handling: <span class="mono text-slate-200">${(v.handling * 35).toFixed(0)}%</span></div>
+            </div>
+          </div>
+          <button class="mt-3 w-full py-2 px-3 rounded-lg text-xs font-bold transition ${
+            selected
+              ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 cursor-default'
+              : owned
+              ? 'bg-slate-700 hover:bg-slate-600 text-white cursor-pointer'
+              : canAfford
+              ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 cursor-pointer'
+              : 'bg-slate-700/50 text-slate-500 cursor-not-allowed'
+          }">
+            ${selected ? 'Currently Selected' : owned ? 'Switch Vehicle' : `Unlock • ₹${v.price}`}
+          </button>
+        `;
+        const btn = card.querySelector('button');
+        btn.addEventListener('click', () => {
+          if (selected) return;
+          if (owned) {
+            playerSave.selectedVehicle = v.id;
+            persistSave();
+            rebuildPlayerVehicle();
+            renderGarage();
+          } else if (canAfford) {
+            playerSave.cash -= v.price;
+            playerSave.ownedVehicles.push(v.id);
+            playerSave.selectedVehicle = v.id;
+            persistSave();
+            sfx.playCollectible();
+            rebuildPlayerVehicle();
+            renderGarage();
+            showToast(`Unlocked ${v.name}!`, 'border-amber-400');
+          }
+        });
+        vehContainer.appendChild(card);
+      });
+    }
+
+    // =========================================================================
+    // 13. PHYSICS (WALK & CAR), BODY ROLL/PITCH, EMBLEMS & GTA-STYLE VECTOR MAP
+    // =========================================================================
+    function handleCollisionPenalty() {
+      if (player.violationCooldown > 0) return;
+      player.violationCooldown = 2.0;
+
+      if (!playerSave.chillMode) {
+        const armorMult = 1 - playerSave.upgrades.chassis * 0.14;
+        player.health = Math.max(15, player.health - 9 * armorMult);
+      }
+      if (taxiMission.active && taxiMission.stage === 'DROPOFF') {
+        taxiMission.tipBonus = Math.max(0, taxiMission.tipBonus - 40);
+      }
+
+      if (player.multiplier > 1.0) {
+        player.multiplier = Math.max(1.0, +(player.multiplier - 0.5).toFixed(1));
+        showToast(`Impact! Clean Streak reset to ${player.multiplier.toFixed(1)}x`, 'border-rose-500');
+      }
+      player.cleanTimer = 0;
+    }
+
+    function updatePlayerPhysics(dt) {
+      const weather = WEATHER_MODES[currentWeatherIdx];
+      const lampHex = weather.headlightsOn ? 0xfef08a : 0x94a3b8;
+      for (let i = 0; i < streetLampBulbs.length; i++) {
+        streetLampBulbs[i].color.setHex(lampHex);
+      }
+
+      // ON-FOOT WALKING PHYSICS & ANIMATED LIMBS
+      if (player.mode === 'WALK') {
+        sfx.updateEngine(0, false, false);
+        const turnInput = (input.left ? 1 : 0) - (input.right ? 1 : 0);
+        player.walkHeading += turnInput * 2.8 * dt;
+        playerAvatar.root.rotation.y = player.walkHeading;
+
+        const moveInput = (input.up ? 1 : 0) - (input.down ? 1 : 0);
+        if (moveInput !== 0) {
+          const step = moveInput * player.walkingSpeed * dt;
+          let nx = playerAvatar.root.position.x + Math.sin(player.walkHeading) * step;
+          let nz = playerAvatar.root.position.z + Math.cos(player.walkHeading) * step;
+
+          if (player.insideLocation === 'HOME') {
+            nx = Math.max(HOME_INTERIOR_POS.x - 7.8, Math.min(HOME_INTERIOR_POS.x + 7.8, nx));
+            nz = Math.max(HOME_INTERIOR_POS.z - 7.8, Math.min(HOME_INTERIOR_POS.z + 7.8, nz));
+          } else if (player.insideLocation === 'SHOP') {
+            nx = Math.max(SHOP_INTERIOR_POS.x - 8.8, Math.min(SHOP_INTERIOR_POS.x + 8.8, nx));
+            nz = Math.max(SHOP_INTERIOR_POS.z - 6.8, Math.min(SHOP_INTERIOR_POS.z + 6.8, nz));
+          } else {
+            const pRad = 0.55;
+            for (let i = 0; i < colliders.length; i++) {
+              const c = colliders[i];
+              if (Math.abs(c.minX - nx) > 50 && Math.abs(c.minZ - nz) > 50) continue;
+              if (nx + pRad > c.minX && nx - pRad < c.maxX && nz + pRad > c.minZ && nz - pRad < c.maxZ) {
+                nx = playerAvatar.root.position.x;
+                nz = playerAvatar.root.position.z;
+                break;
+              }
+            }
+          }
+
+          playerAvatar.root.position.x = nx;
+          playerAvatar.root.position.z = nz;
+          player.walkPhase += dt * 11;
+          const swing = Math.sin(player.walkPhase) * 0.65;
+          playerAvatar.leftLeg.rotation.x = swing;
+          playerAvatar.rightLeg.rotation.x = -swing;
+          playerAvatar.leftArm.rotation.x = -swing * 0.8;
+          playerAvatar.rightArm.rotation.x = swing * 0.8;
+        } else {
+          playerAvatar.leftLeg.rotation.x *= 0.8;
+          playerAvatar.rightLeg.rotation.x *= 0.8;
+          playerAvatar.leftArm.rotation.x *= 0.8;
+          playerAvatar.rightArm.rotation.x *= 0.8;
+        }
+        return;
+      }
+
+      // DRIVING PHYSICS
+      const engineMult = 1 + playerSave.upgrades.engine * 0.1;
+      const gripMult = (1 + playerSave.upgrades.grip * 0.12) * weather.gripMult;
+      const fuelTankMult = 1 + playerSave.upgrades.chassis * 0.2;
+
+      const fuelCap = !playerSave.chillMode && player.fuel <= 0.5 ? 0.45 : 1.0;
+      const gearRatio = GEAR_RATIOS[player.gear];
+
+      const maxForward = player.spec.topSpeed * engineMult * fuelCap * gearRatio;
+      const maxReverse = 12;
+      const accelRate = player.spec.accel * engineMult * fuelCap * Math.max(0.55, 2.05 - gearRatio);
+      const brakeRate = 40 * gripMult;
+
+      let isBraking = false;
+      if (input.up) {
+        if (player.speed < 0) {
+          player.speed += brakeRate * dt;
+          isBraking = true;
+        } else {
+          player.speed = Math.min(maxForward, player.speed + accelRate * dt);
+        }
+      } else if (input.down) {
+        if (player.speed > 0.5) {
+          player.speed -= brakeRate * dt;
+          isBraking = true;
+        } else {
+          player.speed = Math.max(-maxReverse, player.speed - accelRate * 0.72 * dt);
+        }
+      } else {
+        const drag = 7.2 * dt;
+        if (Math.abs(player.speed) <= drag) player.speed = 0;
+        else player.speed -= Math.sign(player.speed) * drag;
+      }
+
+      if (input.handbrake) {
+        isBraking = true;
+        const hbDrag = 24 * gripMult * dt;
+        if (Math.abs(player.speed) <= hbDrag) player.speed = 0;
+        else player.speed -= Math.sign(player.speed) * hbDrag;
+      }
+
+      if (!playerSave.chillMode && Math.abs(player.speed) > 0.5 && player.fuel > 0) {
+        player.fuel = Math.max(0, player.fuel - (Math.abs(player.speed) * 0.008 * dt) / fuelTankMult);
+      }
+
+      const steerInput = (input.left ? 1 : 0) - (input.right ? 1 : 0);
+      const speedRatio = Math.min(1, Math.abs(player.speed) / (player.spec.topSpeed * engineMult * gearRatio));
+
+      if (player.speed > maxForward) {
+        player.speed -= 15 * dt;
+      }
+
+      const sensitivity = (1.06 - speedRatio * 0.4) * (input.handbrake ? 1.32 : 1.0) * weather.gripMult;
+      const targetSteer = steerInput * player.spec.handling * sensitivity;
+      player.steerAngle += (targetSteer - player.steerAngle) * Math.min(1, dt * 11);
+
+      if (Math.abs(player.speed) > 0.25) {
+        const revSign = player.speed >= 0 ? 1 : -1;
+        const turnFactor = Math.min(1, Math.abs(player.speed) / 5.5);
+        player.heading += player.steerAngle * turnFactor * revSign * dt;
+
+        if (Math.abs(player.steerAngle) > 1.2 && player.speed > 5) {
+          if (
+            (player.steerAngle > 0 && player.signal === 'LEFT') ||
+            (player.steerAngle < 0 && player.signal === 'RIGHT')
+          ) {
+            player.cleanTimer += dt * 1.6;
+          }
+        }
+      }
+
+      if (player.signal !== 'NONE' && Math.abs(steerInput) === 0 && Math.abs(player.speed) > 4) {
+        player.signalTimer += dt;
+        if (player.signalTimer > 2.8) {
+          player.signal = 'NONE';
+          player.signalTimer = 0;
+        }
+      }
+
+      const vx = Math.sin(player.heading) * player.speed;
+      const vz = Math.cos(player.heading) * player.speed;
+      let resolvedX = player.x + vx * dt;
+      let resolvedZ = player.z + vz * dt;
+
+      const carRadius = 1.38;
+      let collided = false;
+
+      for (let i = 0; i < colliders.length; i++) {
+        const c = colliders[i];
+        if (Math.abs(c.minX - resolvedX) > 70 && Math.abs(c.minZ - resolvedZ) > 70) continue;
+        if (
+          resolvedX + carRadius > c.minX &&
+          resolvedX - carRadius < c.maxX &&
+          resolvedZ + carRadius > c.minZ &&
+          resolvedZ - carRadius < c.maxZ
+        ) {
+          collided = true;
+          const oL = resolvedX + carRadius - c.minX;
+          const oR = c.maxX - (resolvedX - carRadius);
+          const oT = resolvedZ + carRadius - c.minZ;
+          const oB = c.maxZ - (resolvedZ - carRadius);
+          const minO = Math.min(oL, oR, oT, oB);
+          if (minO === oL) resolvedX = c.minX - carRadius;
+          else if (minO === oR) resolvedX = c.maxX + carRadius;
+          else if (minO === oT) resolvedZ = c.minZ - carRadius;
+          else resolvedZ = c.maxZ + carRadius;
+        }
+      }
+
+      for (let i = 0; i < aiCars.length; i++) {
+        const ai = aiCars[i];
+        const dx = resolvedX - ai.x;
+        const dz = resolvedZ - ai.z;
+        const dist = Math.hypot(dx, dz);
+        const minDist = 2.75;
+        if (dist < minDist && dist > 0.001) {
+          collided = true;
+          const push = (minDist - dist) * 0.75;
+          resolvedX += (dx / dist) * push;
+          resolvedZ += (dz / dist) * push;
+          ai.speed = 0;
+        }
+      }
+
+      if (collided && Math.abs(player.speed) > 4.5) {
+        player.speed *= 0.35;
+        sfx.playCollision();
+        handleCollisionPenalty();
+      }
+
+      player.x = resolvedX;
+      player.z = resolvedZ;
+      player.meshObj.group.position.set(player.x, 0, player.z);
+      player.meshObj.group.rotation.y = player.heading;
+
+      // Subtle suspension body roll & braking/acceleration pitch
+      const targetRoll = -player.steerAngle * Math.min(1, Math.abs(player.speed) / 25) * 0.045;
+      const targetPitch = isBraking ? 0.03 : input.up ? -0.02 : 0;
+      player.meshObj.group.rotation.z += (targetRoll - player.meshObj.group.rotation.z) * Math.min(1, dt * 10);
+      player.meshObj.group.rotation.x += (targetPitch - player.meshObj.group.rotation.x) * Math.min(1, dt * 10);
+
+      player.meshObj.wheels.forEach((w, idx) => {
+        w.rotation.x += player.speed * dt * 2.3;
+        if (idx < 2) w.rotation.y = player.steerAngle * 0.25;
+      });
+
+      player.meshObj.brakeMat.color.setHex(isBraking ? 0xff2222 : 0x7f1d1d);
+
+      const blinkOn = Math.floor(performance.now() / 280) % 2 === 0;
+      if (player.signal !== 'NONE' && blinkOn !== player.lastBlinkState) {
+        sfx.playBlinker(blinkOn);
+      }
+      player.lastBlinkState = blinkOn;
+      player.meshObj.indLeftMat.color.setHex(player.signal === 'LEFT' && blinkOn ? 0xfbbf24 : 0x451a03);
+      player.meshObj.indRightMat.color.setHex(player.signal === 'RIGHT' && blinkOn ? 0xfbbf24 : 0x451a03);
+
+      sfx.updateEngine(speedRatio, input.handbrake && Math.abs(steerInput) > 0, true);
+
+      const propCullSq = 380 * 380;
+      for (let i = 0; i < cullableGroups.length; i++) {
+        const cg = cullableGroups[i];
+        const dSq = (cg.x - player.x) ** 2 + (cg.z - player.z) ** 2;
+        cg.group.visible = dSq < propCullSq;
+      }
+
+      if (player.serviceCooldown > 0) player.serviceCooldown -= dt;
+      serviceStations.forEach((st) => {
+        const d = Math.hypot(player.x - st.x, player.z - st.z);
+        if (d < 5.5 && Math.abs(player.speed) < 3.0 && player.serviceCooldown <= 0) {
+          if (st.type === 'FUEL' && player.fuel < 96) {
+            player.fuel = 100;
+            player.serviceCooldown = 3.0;
+            sfx.playService();
+            showToast('Fuel Refilled to 100%!', 'border-emerald-400');
+          } else if (st.type === 'REPAIR' && player.health < 96) {
+            player.health = 100;
+            player.serviceCooldown = 3.0;
+            sfx.playService();
+            showToast('Vehicle Repaired to 100%!', 'border-orange-400');
+          }
+        }
+      });
+
+      if (player.violationCooldown > 0) player.violationCooldown -= dt;
+      if (Math.abs(player.speed) > 5 && !collided) {
+        player.cleanTimer += dt;
+        player.cruisePayoutTimer += dt;
+        if (player.cleanTimer >= 5.0 && player.multiplier < 3.0) {
+          player.multiplier = Math.min(3.0, +(player.multiplier + 0.1).toFixed(1));
+          player.cleanTimer = 0;
+        }
+        if (player.cruisePayoutTimer >= 6.0) {
+          const cruiseMult = 1 + playerSave.upgrades.cruise * 0.2;
+          playerSave.cash += Math.round(18 * player.multiplier * cruiseMult);
+          player.cruisePayoutTimer = 0;
+          persistSave();
+        }
+      }
+    }
+
+    function updateExplorationAndWaypoints(dt) {
+      const now = performance.now();
+      const pulse = 1 + Math.sin(now * 0.005) * 0.08;
+
+      serviceStations.forEach((st) => st.ringMesh.scale.set(pulse, pulse, 1));
+      interactiveDoors.forEach((dr) => dr.ringMesh.scale.set(pulse, pulse, 1));
+
+      // Check nearby enterable/exitable doors when on foot
+      const doorBtn = document.getElementById('btn-door-action');
+      nearbyDoor = null;
+      if (player.mode === 'WALK') {
+        const px = playerAvatar.root.position.x;
+        const pz = playerAvatar.root.position.z;
+        for (let i = 0; i < interactiveDoors.length; i++) {
+          const d = interactiveDoors[i];
+          if (Math.hypot(px - d.x, pz - d.z) < 3.2) {
+            nearbyDoor = d;
+            break;
+          }
+        }
+      }
+      if (nearbyDoor) {
+        doorBtn.textContent = `🚪 ${nearbyDoor.label} (T)`;
+        doorBtn.classList.remove('hidden');
+      } else {
+        doorBtn.classList.add('hidden');
+      }
+
+      const activeX = player.mode === 'WALK' ? playerAvatar.root.position.x : player.x;
+      const activeZ = player.mode === 'WALK' ? playerAvatar.root.position.z : player.z;
+
+      explorationEmblems.forEach((em) => {
+        if (em.collected) return;
+        em.mesh.rotation.y += dt * 2.2;
+        em.mesh.position.y = 2.2 + Math.sin(now * 0.004 + em.id) * 0.3;
+        em.ring.scale.set(pulse, pulse, 1);
+
+        if (Math.hypot(activeX - em.x, activeZ - em.z) < 4.5) {
+          em.collected = true;
+          em.mesh.visible = false;
+          em.ring.visible = false;
+          playerSave.collectedEmblems.push(em.id);
+          playerSave.cash += 300;
+          persistSave();
+          sfx.playCollectible();
+          showToast(
+            `Emblem Found (${playerSave.collectedEmblems.length}/20)! +₹300`,
+            'border-amber-400'
+          );
+        }
+      });
+
+      speedTraps.forEach((tr) => {
+        if (tr.cooldown > 0) tr.cooldown -= dt;
+        const kmh = Math.round(Math.abs(player.speed) * 3.6);
+        if (player.mode === 'CAR' && Math.hypot(player.x - tr.x, player.z - tr.z) < 12 && kmh >= 75 && tr.cooldown <= 0) {
+          tr.cooldown = 12.0;
+          const bonus = Math.round(kmh * 0.85);
+          playerSave.cash += bonus;
+          const isBest = kmh > playerSave.bestRadarSpeed;
+          if (isBest) playerSave.bestRadarSpeed = kmh;
+          persistSave();
+          sfx.playPin();
+          showToast(
+            `${tr.label}: ${kmh} km/h${isBest ? ' (NEW BEST!)' : ''} • +₹${bonus}`,
+            'border-sky-400'
+          );
+        }
+      });
+
+      if (customWaypoint && !taxiMission.active && !raceState.active) {
+        customWaypoint.ringMesh.scale.set(pulse, pulse, 1);
+        const distToPin = Math.hypot(activeX - customWaypoint.x, activeZ - customWaypoint.z);
+        if (distToPin < 6.5) {
+          sfx.playCollectible();
+          showToast('Reached Custom GPS Pin!', 'border-teal-400');
+          clearCustomWaypoint(false);
+          return;
+        }
+        currentGpsPath = computeRoadPath(activeX, activeZ, customWaypoint.x, customWaypoint.z);
+        updateGpsVisualLine([...currentGpsPath, { x: customWaypoint.x, z: customWaypoint.z }]);
+        updateTurnByTurnHud(customWaypoint.x, customWaypoint.z, activeX, activeZ);
+      }
+    }
+
+    function updateTurnByTurnHud(targetX, targetZ, refX, refZ) {
+      document.getElementById('gps-mode-badge').textContent = 'GPS Pin';
+      const totalDist = Math.round(Math.hypot(targetX - refX, targetZ - refZ));
+      document.getElementById('gps-dist').textContent = `${totalDist}m`;
+
+      let instr = 'Follow Curved GPS Route';
+      let arrowRot = 0;
+      const hdg = player.mode === 'WALK' ? player.walkHeading : player.heading;
+
+      if (currentGpsPath.length >= 2) {
+        const nextWp = currentGpsPath[1];
+        const distTurn = Math.round(Math.hypot(nextWp.x - refX, nextWp.z - refZ));
+        const angleToNext = Math.atan2(nextWp.x - refX, nextWp.z - refZ);
+        let rel = angleToNext - hdg;
+        while (rel > Math.PI) rel -= Math.PI * 2;
+        while (rel < -Math.PI) rel += Math.PI * 2;
+        arrowRot = Math.round((-rel * 180) / Math.PI);
+
+        if (rel > 0.65) instr = `Turn Left in ${distTurn}m`;
+        else if (rel < -0.65) instr = `Turn Right in ${distTurn}m`;
+        else instr = `Continue Ahead (${totalDist}m)`;
+      }
+
+      document.getElementById('gps-instruction').textContent = instr;
+      document.getElementById('gps-arrow-svg').style.transform = `rotate(${arrowRot}deg)`;
+    }
+
+    // GTA-STYLE VECTOR MAP RENDERER (DARK-CASED ROADS, PARKS, LABELS & PLAYER ARROW)
+    function renderFullCityMap() {
+      const fm = document.getElementById('fullmap-canvas');
+      const ctx = fm.getContext('2d');
+      const w = fm.width;
+      const h = fm.height;
+      ctx.clearRect(0, 0, w, h);
+
+      document.getElementById('map-emblem-count').textContent = `${playerSave.collectedEmblems.length}/20`;
+
+      const pad = 20;
+      const mapSpan = w - pad * 2;
+      const cell = mapSpan / GRID_N;
+
+      // Base map backdrop
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(0, 0, w, h);
+
+      // Parks & Building Blocks
+      for (let gz = 0; gz < GRID_N; gz++) {
+        for (let gx = 0; gx < GRID_N; gx++) {
+          const t = GRID[gz][gx];
+          const x = pad + gx * cell;
+          const y = pad + gz * cell;
+          if (t === 'P') {
+            ctx.fillStyle = '#14532d';
+            ctx.fillRect(x, y, cell, cell);
+          } else if (t === 'B') {
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(x + 1, y + 1, cell - 2, cell - 2);
+          } else if (t === 'F') {
+            ctx.fillStyle = '#059669';
+            ctx.fillRect(x + 2, y + 2, cell - 4, cell - 4);
+          } else if (t === 'M') {
+            ctx.fillStyle = '#ea580c';
+            ctx.fillRect(x + 2, y + 2, cell - 4, cell - 4);
+          }
+        }
+      }
+
+      // Draw continuous dark-cased GTA-style vector road network
+      const drawRoadPass = (strokeColor, hwyWidth, cityWidth) => {
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = strokeColor;
+
+        for (let gz = 0; gz < GRID_N; gz++) {
+          for (let gx = 0; gx < GRID_N; gx++) {
+            if (!isRoadCell(gx, gz)) continue;
+            const cx = pad + (gx + 0.5) * cell;
+            const cy = pad + (gz + 0.5) * cell;
+            const isH = isHighwayCell(gx, gz);
+            ctx.lineWidth = isH ? hwyWidth : cityWidth;
+
+            if (isRoadCell(gx + 1, gz)) {
+              ctx.beginPath();
+              ctx.moveTo(cx, cy);
+              ctx.lineTo(cx + cell, cy);
+              ctx.stroke();
+            }
+            if (isRoadCell(gx, gz + 1)) {
+              ctx.beginPath();
+              ctx.moveTo(cx, cy);
+              ctx.lineTo(cx, cy + cell);
+              ctx.stroke();
+            }
+            if (GRID[gz][gx] === 'O') {
+              ctx.beginPath();
+              ctx.arc(cx, cy, cell * 0.48, 0, Math.PI * 2);
+              ctx.stroke();
+            }
+          }
+        }
+      };
+
+      // Outer dark casing + inner bright road fill
+      drawRoadPass('#020617', cell * 0.72, cell * 0.52);
+      drawRoadPass('#64748b', cell * 0.48, cell * 0.32);
+
+      // 6 Named City Labels
+      ctx.fillStyle = 'rgba(248, 250, 252, 0.88)';
+      ctx.font = 'bold 10px Inter, sans-serif';
+      ctx.textAlign = 'center';
+      CITY_HUBS.forEach((hub) => {
+        ctx.fillText(hub.name.toUpperCase(), pad + (hub.gx + 0.5) * cell, pad + (hub.gz - 0.8) * cell);
+      });
+
+      const worldToMap = (wx, wz) => {
+        const halfWorld = (GRID_N * TILE_SIZE) / 2;
+        return {
+          x: pad + ((wx + halfWorld) / (GRID_N * TILE_SIZE)) * mapSpan,
+          y: pad + ((wz + halfWorld) / (GRID_N * TILE_SIZE)) * mapSpan
+        };
+      };
+
+      const activeX = player.mode === 'WALK' ? playerAvatar.root.position.x : player.x;
+      const activeZ = player.mode === 'WALK' ? playerAvatar.root.position.z : player.z;
+
+      // Draw active GPS or Taxi path
+      if ((customWaypoint || taxiMission.active) && currentGpsPath.length > 0) {
+        ctx.strokeStyle = taxiMission.active ? '#10b981' : '#14b8a6';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        const p0 = worldToMap(activeX, activeZ);
+        ctx.moveTo(p0.x, p0.y);
+        currentGpsPath.forEach((pt) => {
+          const mp = worldToMap(pt.x, pt.z);
+          ctx.lineTo(mp.x, mp.y);
+        });
+        ctx.stroke();
+      }
+
+      // Emblems
+      explorationEmblems.forEach((em) => {
+        if (em.collected) return;
+        const mp = worldToMap(em.x, em.z);
+        ctx.fillStyle = '#fbbf24';
+        ctx.beginPath();
+        ctx.arc(mp.x, mp.y, 3.6, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Radars
+      speedTraps.forEach((tr) => {
+        const mp = worldToMap(tr.x, tr.z);
+        ctx.fillStyle = '#38bdf8';
+        ctx.beginPath();
+        ctx.arc(mp.x, mp.y, 3.8, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Taxi Target Marker
+      if (taxiMission.active) {
+        const tPos = taxiMission.stage === 'PICKUP' ? taxiMission.pickupPos : taxiMission.dropoffPos;
+        const tp = worldToMap(tPos.x, tPos.z);
+        ctx.fillStyle = taxiMission.stage === 'PICKUP' ? '#10b981' : '#f59e0b';
+        ctx.beginPath();
+        ctx.arc(tp.x, tp.y, 6.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+
+      // Custom Pin
+      if (customWaypoint) {
+        const dp = worldToMap(customWaypoint.x, customWaypoint.z);
+        ctx.fillStyle = '#f43f5e';
+        ctx.beginPath();
+        ctx.arc(dp.x, dp.y, 6.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+
+      // Directional Player Arrow
+      const pp = worldToMap(activeX, activeZ);
+      const hdg = player.mode === 'WALK' ? player.walkHeading : player.heading;
+      ctx.save();
+      ctx.translate(pp.x, pp.y);
+      ctx.rotate(-hdg + Math.PI);
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(0, -7);
+      ctx.lineTo(5, 6);
+      ctx.lineTo(0, 3);
+      ctx.lineTo(-5, 6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function updateHudDom() {
+      document.getElementById('hud-cash').textContent = `₹${playerSave.cash}`;
+
+      const activeX = player.mode === 'WALK' ? playerAvatar.root.position.x : player.x;
+      const activeZ = player.mode === 'WALK' ? playerAvatar.root.position.z : player.z;
+      const g = worldToGrid(activeX, activeZ);
+      document.getElementById('hud-district').textContent =
+        player.insideLocation === 'HOME'
+          ? 'Inside Home'
+          : player.insideLocation === 'SHOP'
+          ? 'Inside Shop'
+          : getZoneName(g.gx, g.gz);
+
+      const kmh = player.mode === 'WALK' ? 0 : Math.round(Math.abs(player.speed) * 3.6);
+      document.getElementById('hud-speed').textContent = kmh;
+      document.getElementById('hud-gear').textContent =
+        player.mode === 'WALK' ? 'WALK' : player.speed < -0.4 ? 'R' : `G${player.gear}`;
+
+      const fuelPct = playerSave.chillMode ? 100 : Math.round(player.fuel);
+      const hpPct = playerSave.chillMode ? 100 : Math.round(player.health);
+      document.getElementById('hud-fuel-bar').style.width = `${fuelPct}%`;
+      document.getElementById('hud-fuel-bar').className = `h-full ${fuelPct < 20 ? 'bg-rose-500' : 'bg-emerald-400'}`;
+      document.getElementById('hud-hp-bar').style.width = `${hpPct}%`;
+      document.getElementById('hud-hp-bar').className = `h-full ${hpPct < 35 ? 'bg-rose-500' : 'bg-sky-400'}`;
+
+      document.getElementById('dash-ind-l').className =
+        player.signal === 'LEFT' ? 'text-amber-400 text-xs sm:text-sm indicator-blink' : 'text-amber-400 text-xs sm:text-sm opacity-20';
+      document.getElementById('dash-ind-r').className =
+        player.signal === 'RIGHT' ? 'text-amber-400 text-xs sm:text-sm indicator-blink' : 'text-amber-400 text-xs sm:text-sm opacity-20';
+    }
+
+    // =========================================================================
+    // 14. CAMERA CONTROLLER, RAIN & MAIN ANIMATION LOOP
+    // =========================================================================
+    const camPos = new THREE.Vector3(player.x, 12, player.z - 15);
+    const camLook = new THREE.Vector3(player.x, 1.5, player.z);
+
+    function updateCamera(dt) {
+      if (player.mode === 'WALK') {
+        const px = playerAvatar.root.position.x;
+        const pz = playerAvatar.root.position.z;
+        const fwdX = Math.sin(player.walkHeading);
+        const fwdZ = Math.cos(player.walkHeading);
+
+        if (player.insideLocation) {
+          const desiredPos = new THREE.Vector3(px - fwdX * 4.5, 3.2, pz - fwdZ * 4.5);
+          const desiredLook = new THREE.Vector3(px + fwdX * 4, 1.4, pz + fwdZ * 4);
+          camPos.lerp(desiredPos, Math.min(1, dt * 10));
+          camLook.lerp(desiredLook, Math.min(1, dt * 12));
+          camera.position.copy(camPos);
+          camera.lookAt(camLook);
+        } else {
+          const desiredPos = new THREE.Vector3(px - fwdX * 6.5, 3.6, pz - fwdZ * 6.5);
+          const desiredLook = new THREE.Vector3(px + fwdX * 6, 1.4, pz + fwdZ * 6);
+          camPos.lerp(desiredPos, Math.min(1, dt * 9));
+          camLook.lerp(desiredLook, Math.min(1, dt * 12));
+          camera.position.copy(camPos);
+          camera.lookAt(camLook);
+        }
+        return;
+      }
+
+      const fwdX = Math.sin(player.heading);
+      const fwdZ = Math.cos(player.heading);
+
+      if (cameraMode === 0) {
+        const desiredPos = new THREE.Vector3(player.x - fwdX * 11, 5.4, player.z - fwdZ * 11);
+        const desiredLook = new THREE.Vector3(player.x + fwdX * 10, 1.4, player.z + fwdZ * 10);
+        camPos.lerp(desiredPos, Math.min(1, dt * 8.5));
+        camLook.lerp(desiredLook, Math.min(1, dt * 12));
+        camera.position.copy(camPos);
+        camera.lookAt(camLook);
+      } else if (cameraMode === 1) {
+        camera.position.set(player.x + fwdX * 0.6, player.spec.height + 0.62, player.z + fwdZ * 0.6);
+        camera.lookAt(player.x + fwdX * 24, player.spec.height + 0.35, player.z + fwdZ * 24);
+      } else {
+        const desiredPos = new THREE.Vector3(player.x, 52, player.z - 18);
+        camPos.lerp(desiredPos, Math.min(1, dt * 7));
+        camera.position.copy(camPos);
+        camera.lookAt(player.x, 0, player.z + 4);
+      }
+
+      if (rainSystem.visible) {
+        rainSystem.position.set(player.x, 0, player.z);
+        const posAttr = rainSystem.geometry.attributes.position;
+        for (let i = 0; i < RAIN_COUNT; i++) {
+          let y = posAttr.getY(i) - 44 * dt;
+          if (y < 0) y = 65;
+          posAttr.setY(i, y);
+        }
+        posAttr.needsUpdate = true;
+      }
+    }
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    let lastTime = performance.now();
+    function animate(now) {
+      requestAnimationFrame(animate);
+      const dt = Math.min(0.05, (now - lastTime) / 1000);
+      lastTime = now;
+
+      updateTrafficLights(dt);
+      updatePlayerPhysics(dt);
+      updateAITraffic(dt);
+      updatePedestrians(dt);
+      updateTaxiMission(dt);
+      updateRaceMode(dt);
+      updateExplorationAndWaypoints(dt);
+      updateCamera(dt);
+      updateHudDom();
+
+      renderer.render(scene, camera);
+    }
+
+    window.onload = function () {
+      if (playerSave.tutorialDone) {
+        document.getElementById('welcome-modal').classList.add('hidden');
+      }
+      updateVehicleToggleBtn();
+      lastTime = performance.now();
+      requestAnimationFrame(animate);
+    };
+  </script>
+</body>
+</html>
